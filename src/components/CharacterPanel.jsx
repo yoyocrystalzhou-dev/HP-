@@ -207,7 +207,7 @@ function CharacterEditor({ char: init, candidates, isPlayer, onSave, onCancel })
   );
 }
 
-export default function CharacterPanel({ characters, activeId, activeMode, player, onSelect, onEdit, onEditPlayer, onDelete, onImportChars }) {
+export default function CharacterPanel({ characters, activeId, activeMode, player, onSelect, onEdit, onEditPlayer, onDelete, onImportChars, profileOnly = false }) {
   const [editingId, setEditingId] = useState(null);
   const [drafts, setDrafts] = useState(null); // 6A: parsed TXT character drafts, or null
   const fileRef = useRef(null);
@@ -328,6 +328,12 @@ export default function CharacterPanel({ characters, activeId, activeMode, playe
         </div>
       </div>
 
+      {profileOnly ? (
+        <div style={{ fontSize: 12, color: T.faint, lineHeight: 1.6, padding: "0 2px 12px" }}>
+          这里只编辑你的主控人设、特殊经历、隐藏设定和补充要求。其他人物卡会在后台自动参与世界叙事，不作为单独聊天入口展示。
+        </div>
+      ) : (
+      <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <span style={{ fontSize: 12, color: T.muted }}>AI 角色 · 点击进入一对一聊天</span>
         <div style={{ display: "flex", gap: 6 }}>
@@ -378,6 +384,8 @@ export default function CharacterPanel({ characters, activeId, activeMode, playe
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -161,7 +161,7 @@ export default function App() {
     .filter(([, v]) => Number(v) > 0)
     .map(([id, v]) => ({ name: charNameById[id] || id, value: v }))
     .sort((a, b) => b.value - a.value);
-  const activeMode    = activeProject?.activeMode || "world";
+  const activeMode    = HP_KIOSK ? "world" : (activeProject?.activeMode || "world");
   const activeCharId  = activeProject?.activeCharId || null;
   const activeChar    = projectChars.find((c) => c.id === activeCharId) || projectChars[0] || DEFAULT_CHAR;
   const scopeChar     = activeMode === "character" ? activeChar : null;
@@ -418,6 +418,7 @@ export default function App() {
   // ── Mode / scope switching ──
   const switchToWorld = () => { patchProject((p) => ({ ...p, activeMode: "world" })); setPanel(null); };
   const handleCharSelect = (id) => {
+    if (HP_KIOSK) return;
     patchProject((p) => ({ ...p, activeMode: "character", activeCharId: id }));
     setPanel(null);
   };
@@ -1409,6 +1410,7 @@ ${transcriptLines(chunk)}`;
               player={player} onEditPlayer={handlePlayerEdit}
               onSelect={handleCharSelect} onEdit={handleCharEdit} onDelete={handleCharDelete}
               onImportChars={handleImportChars}
+              profileOnly={HP_KIOSK}
             />
           )}
           {panel === "state" && (
@@ -1480,8 +1482,8 @@ ${transcriptLines(chunk)}`;
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative", zIndex: 1, border: isMobile || HP_KIOSK ? "none" : `1px solid ${V.line}`, borderRadius: isMobile ? 0 : 20, background: HP_KIOSK ? "transparent" : V.frame, boxShadow: isMobile || HP_KIOSK ? "none" : "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" }}>
 
         {/* Header */}
-        <div style={{ height: isMobile ? 56 : 60, borderBottom: `1px solid ${V.lineSoft}`, background: HP_KIOSK ? "rgba(10,11,18,0.55)" : V.headerBar, backdropFilter: HP_KIOSK ? "blur(8px)" : undefined, display: "flex", alignItems: "center", padding: "0 14px", gap: 12, flexShrink: 0 }}>
-          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 7, overflow: "hidden" }}>
+        <div style={{ height: HP_KIOSK && isMobile ? 78 : isMobile ? 56 : 60, borderBottom: `1px solid ${V.lineSoft}`, background: HP_KIOSK ? "rgba(10,11,18,0.55)" : V.headerBar, backdropFilter: HP_KIOSK ? "blur(8px)" : undefined, display: "flex", alignItems: "center", alignContent: HP_KIOSK && isMobile ? "center" : undefined, flexWrap: HP_KIOSK && isMobile ? "wrap" : "nowrap", padding: HP_KIOSK && isMobile ? "8px 12px 7px" : "0 14px", gap: HP_KIOSK && isMobile ? "5px 8px" : 12, flexShrink: 0 }}>
+          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 7, overflow: "hidden", order: HP_KIOSK && isMobile ? 1 : 0 }}>
             <button
               onClick={() => { setHpHome(true); setPanel(null); }}
               title="项目列表"
@@ -1518,10 +1520,10 @@ ${transcriptLines(chunk)}`;
           {/* Centre */}
           {HP_KIOSK ? (
             /* HP 专项：时间 + 学年阶段（挪到头部正中）*/
-            <div style={{ flex: "1 1 0", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", overflow: "hidden", padding: "0 8px" }}>
+            <div style={{ flex: HP_KIOSK && isMobile ? "1 0 100%" : "1 1 0", order: HP_KIOSK && isMobile ? 3 : 0, minWidth: 0, display: "flex", alignItems: "center", gap: 6, justifyContent: "center", overflow: HP_KIOSK && isMobile ? "visible" : "hidden", padding: HP_KIOSK && isMobile ? "0 4px" : "0 8px" }}>
               <span style={{ color: V.gold, fontSize: 12 }}>📅</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: V.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
-              {currentCanonBeat && phaseName(currentCanonBeat) && (
+              <span style={{ fontSize: isMobile ? 12.5 : 13, fontWeight: 700, color: V.ink, overflow: HP_KIOSK && isMobile ? "visible" : "hidden", textOverflow: HP_KIOSK && isMobile ? "clip" : "ellipsis", whiteSpace: HP_KIOSK && isMobile ? "normal" : "nowrap", textAlign: "center", lineHeight: 1.25 }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
+              {!isMobile && currentCanonBeat && phaseName(currentCanonBeat) && (
                 <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>· {phaseName(currentCanonBeat)}</span>
               )}
             </div>
@@ -1547,7 +1549,7 @@ ${transcriptLines(chunk)}`;
             </div>
           )}
 
-          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, overflow: "hidden" }}>
+          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, overflow: "hidden", order: HP_KIOSK && isMobile ? 2 : 0, marginLeft: HP_KIOSK && isMobile ? "auto" : 0 }}>
             {/* HP 专项：状态栏入口（移动端，桌面端已是常驻左栏）*/}
             {HP_KIOSK && isMobile && activeMode === "world" && player?.stats && (
               <button
@@ -1561,11 +1563,11 @@ ${transcriptLines(chunk)}`;
             {HP_KIOSK && (
               <button
                 onClick={() => setPanel("chars")}
-                title="角色设定"
+                title="主控人设"
                 style={{ display: "flex", alignItems: "center", gap: isMobile ? 0 : 5, justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
               >
                 <I.User />
-                {!isMobile && <span>角色</span>}
+                {!isMobile && <span>人设</span>}
               </button>
             )}
             {HP_KIOSK && (
