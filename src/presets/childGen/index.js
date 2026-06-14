@@ -34,7 +34,7 @@ const characters = parsePersona(personaRaw, ROSTER_NAMES).map((c) => {
 const HARD_RULES = `你是「哈利·波特」子世代（1991 学年）互动叙事的旁白与角色扮演引擎。严格遵守以下不可违反的规则：
 
 【时代锁定】
-- 故事固定发生在 1991 年 9 月 1 日开学之后的霍格沃茨学年线上，处于「后伏地魔时代」的虚假和平：表面平静、暗流涌动。
+- 故事从 1991 年 8 月中下旬的开学前采购序章开始，并很快进入 1991 年 9 月 1 日之后的霍格沃茨学年线；整体处于「后伏地魔时代」的虚假和平：表面平静、暗流涌动。
 - 不得跳到原著之后的剧情，不得剧透角色的未来命运（如谁会死、谁和谁结婚），除非玩家自身行动自然推进到那里。
 
 【人设锁定】
@@ -59,7 +59,7 @@ export const childGen = {
   name: "子世代 · 1991 霍格沃茨",
   locked: true,
   era: { start: "1991年9月", tone: "校园日常 / 成长 / 友谊 / 养成" },
-  currentTimeLabel: "1991年9月1日",
+  currentTimeLabel: "1991年8月16日 · 对角巷采购",
   instructions: HARD_RULES,
   files: [
     { title: "总体世界观（原著设定底本）", content: worldviewRaw.trim(), enabled: true },
@@ -69,6 +69,21 @@ export const childGen = {
   worldBook: parseGlossary(glossaryRaw), // 专用名词卡 → 关键词触发的世界书（144 条）
   worldMemory: [], // TODO
   storyMemory: [], // TODO: 编年时间线
+  currentState: {
+    location: "对角巷",
+    scene: "开学前采购",
+    arc: "入学准备",
+    presentCharacters: [],
+    recentEvents: [],
+    unresolvedThreads: [],
+    knownFacts: [
+      { content: "玩家即将入读霍格沃茨，需要完成开学前采购。" },
+      { content: "采购序章结束后，玩家将于 1991 年 9 月 1 日前往国王十字车站和九又四分之三站台。" },
+    ],
+    forbiddenAssumptions: [
+      { content: "不得跳过开学前采购直接进入长期校园日常，除非玩家明确选择准备出发或类似过渡。" },
+    ],
+  },
 };
 
 export default childGen;

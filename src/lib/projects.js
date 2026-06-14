@@ -46,7 +46,7 @@
 import { uid } from "./utils.js";
 import { store } from "./storage.js";
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** The player character's fixed id (the user's own avatar in the world). */
 export const PLAYER_ID = "player";
@@ -496,6 +496,34 @@ export function migrateAll(projects, sessions) {
   const newProjects = {};
   const newSessions = { ...(sessions || {}) };
 
+  const hasWorldDialogue = (proj) => (proj.worldChatIds || []).some((sid) =>
+    (newSessions[sid]?.messages || []).some((m) => String(m?.content || "").trim())
+  );
+
+  const migrateHpOpening = (proj) => {
+    if ((proj.id || "") !== "hp-child_gen") return proj;
+    if ((proj.currentTimeLabel || "").trim() !== "1991年9月1日") return proj;
+    if (hasWorldDialogue(proj)) return proj;
+    return {
+      ...proj,
+      currentTimeLabel: "1991年8月16日 · 对角巷采购",
+      currentState: createCurrentState({
+        ...proj.currentState,
+        location: "对角巷",
+        scene: "开学前采购",
+        arc: "入学准备",
+        knownFacts: [
+          ...(proj.currentState?.knownFacts || []),
+          { content: "玩家即将入读霍格沃茨，需要完成开学前采购。" },
+        ],
+        forbiddenAssumptions: [
+          ...(proj.currentState?.forbiddenAssumptions || []),
+          { content: "不得跳过开学前采购直接进入长期校园日常，除非玩家明确选择准备出发或类似过渡。" },
+        ],
+      }),
+    };
+  };
+
   for (const [pid, proj] of Object.entries(projects || {})) {
     // Already has the v2 chat structure → only patch newly-added fields (e.g.
     // playerCharacter). Never recreate WorldChats / regroup character chats here.
@@ -505,13 +533,14 @@ export function migrateAll(projects, sessions) {
         continue;
       }
       changed = true;
+      const migratedProj = migrateHpOpening(proj);
       newProjects[pid] = {
-        ...proj,
-        playerCharacter: proj.playerCharacter ? createPlayerCharacter(proj.playerCharacter) : createPlayerCharacter(),
-        pendingUpdates: Array.isArray(proj.pendingUpdates) ? proj.pendingUpdates : [],
-        currentTimeLabel: typeof proj.currentTimeLabel === "string" ? proj.currentTimeLabel : "",
-        currentState: createCurrentState(proj.currentState),
-        files: normalizeFiles(proj.files),
+        ...migratedProj,
+        playerCharacter: migratedProj.playerCharacter ? createPlayerCharacter(migratedProj.playerCharacter) : createPlayerCharacter(),
+        pendingUpdates: Array.isArray(migratedProj.pendingUpdates) ? migratedProj.pendingUpdates : [],
+        currentTimeLabel: typeof migratedProj.currentTimeLabel === "string" ? migratedProj.currentTimeLabel : "",
+        currentState: createCurrentState(migratedProj.currentState),
+        files: normalizeFiles(migratedProj.files),
         schemaVersion: SCHEMA_VERSION,
         updatedAt: Date.now(),
       };

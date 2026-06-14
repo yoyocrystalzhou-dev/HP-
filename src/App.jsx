@@ -33,13 +33,14 @@ import GenerationSelect    from "./components/GenerationSelect.jsx";
 import CharacterCreator    from "./components/CharacterCreator.jsx";
 import { PRESETS, GENERATIONS } from "./presets/index.js";
 import { instantiatePreset, presetProjectId } from "./lib/loadPreset.js";
-import { currentBeat, canonAnchor, phaseName, advanceTime } from "./lib/timeline.js";
+import { currentBeat, canonAnchor, phaseName, advanceTime, labelSortKey } from "./lib/timeline.js";
 import { initialStats, formatStatsLine, GATING_RULES, STAMINA_MAX } from "./lib/stats.js";
 import { initialCourses, formatCoursesBlock, COURSES, normalizeCourses } from "./lib/courses.js";
 import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects, examGrade } from "./lib/checks.js";
 import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
 import { favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor } from "./lib/affinity.js";
-import { LIFE_SCENE_RULES, SCENE_LOCATIONS, SCENE_TONES, SCENE_PERIODS, buildLifeSceneInput, formatLifePeriodBlock } from "./lib/lifeScenes.js";
+import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
+import { dayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
@@ -118,7 +119,6 @@ export default function App() {
   const [loading,     setLoading]     = useState(false);
   const [extracting,   setExtracting]  = useState(false);
   const [status,      setStatus]      = useState("");
-  const [sceneToneId, setSceneToneId]  = useState("open");
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editDraft,   setEditDraft]   = useState("");
 
@@ -176,7 +176,10 @@ export default function App() {
   const worldMemory = activeProject?.worldMemory || [];
   const storyMemory = activeProject?.storyMemory || [];
   const scenePeriodId = activeProject?.dayPeriod || "morning";
-  const scenePeriod = SCENE_PERIODS.find((p) => p.id === scenePeriodId) || SCENE_PERIODS[0];
+  const scenePeriod = dayPeriod(scenePeriodId);
+  const currentCalendarMoment = HP_KIOSK && activeMode === "world"
+    ? calendarMoment({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
+    : null;
 
   const worldChatList = worldChatsOf(sessions, activeProject);
   const charChatList  = characterChatsOf(sessions, scopeChar);
@@ -224,9 +227,16 @@ export default function App() {
   const setProjectFiles = (fn) =>
     patchProject((p) => ({ ...p, files: typeof fn === "function" ? fn(p.files || []) : fn }));
 
-  const appendLifeScene = (location) => {
-    const tone = SCENE_TONES.find((t) => t.id === sceneToneId) || SCENE_TONES[0];
-    const text = buildLifeSceneInput(location, tone, scenePeriod);
+  const chooseCalendarOption = (option) => {
+    const text = buildCalendarChoiceInput(option, scenePeriod, activeProject?.currentTimeLabel);
+    if (option.nextTimeLabel || option.nextPeriodId) {
+      patchProject((p) => ({
+        ...p,
+        currentTimeLabel: option.nextTimeLabel || p.currentTimeLabel,
+        dayPeriod: option.nextPeriodId || p.dayPeriod,
+        beatProgress: option.nextTimeLabel ? 0 : p.beatProgress,
+      }));
+    }
     setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
     requestAnimationFrame(() => {
       if (!taRef.current) return;
@@ -234,10 +244,6 @@ export default function App() {
       taRef.current.style.height = "auto";
       taRef.current.style.height = Math.min(taRef.current.scrollHeight, 140) + "px";
     });
-  };
-
-  const setScenePeriod = (id) => {
-    patchProject((p) => ({ ...p, dayPeriod: id }));
   };
 
   // ── One-time migration: v0 (pre-Project) and v1 → v2 ──
@@ -592,7 +598,7 @@ export default function App() {
     });
     const csFmt = formatCurrentState(csVisible, { nameMap });
     if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
-    if (HP_KIOSK && activeMode === "world") parts.push(formatLifePeriodBlock(scenePeriod));
+    if (HP_KIOSK && activeMode === "world") parts.push(formatCalendarPeriodBlock(scenePeriod));
     // HP 专项：注入当前时间对应的原著剧情锚点（防跑偏）。位于硬规则之下、当前状态之上。
     if (currentCanonBeat) parts.push(canonAnchor(currentCanonBeat));
     if (csFmt.stateLines.length) parts.push(`【当前剧情状态】\n${csFmt.stateLines.join("\n")}`);
@@ -960,6 +966,7 @@ ${transcriptLines(chunk)}`;
       // HP 专项：原著时间线自动推进（混合节奏，仅世界模式 + HP 预设）。基于 prev 状态结算，防陈旧。
       if (activePreset && activeMode === "world" && canonTimeline.length) {
         patchProject((p) => {
+          if (labelSortKey(p.currentTimeLabel) < 19910901) return p;
           const adv = advanceTime(p.currentTimeLabel, canonTimeline, p.beatProgress);
           return adv.advanced
             ? { ...p, currentTimeLabel: adv.label, beatProgress: 0 }
@@ -1737,94 +1744,56 @@ ${transcriptLines(chunk)}`;
         {/* Input bar */}
         <div style={{ borderTop: `1px solid ${V.lineSoft}`, background: V.inputBar, padding: "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto" }}>
-          {HP_KIOSK && activeMode === "world" && (
-            <div style={{ marginBottom: 9, display: "grid", gap: 7 }}>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
-                {SCENE_PERIODS.map((period) => {
-                  const on = scenePeriodId === period.id;
-                  return (
-                    <button
-                      key={period.id}
-                      type="button"
-                      onClick={() => setScenePeriod(period.id)}
-                      disabled={loading}
-                      title={period.instruction}
-                      style={{
-                        flex: "0 0 auto",
-                        height: 26,
-                        padding: "0 10px",
-                        borderRadius: 999,
-                        border: `1px solid ${on ? V.line : V.lineSoft}`,
-                        background: on ? "rgba(232,199,102,0.12)" : "rgba(255,250,226,0.035)",
-                        color: on ? V.gold : V.muted,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        fontFamily: "inherit",
-                        cursor: loading ? "not-allowed" : "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {period.label}
-                    </button>
-                  );
-                })}
+          {HP_KIOSK && activeMode === "world" && currentCalendarMoment && !input.trim() && (
+            <div
+              style={{
+                marginBottom: 9,
+                border: `1px solid ${V.lineSoft}`,
+                borderRadius: 14,
+                background: "rgba(255,250,226,0.055)",
+                padding: "10px 11px",
+                boxShadow: "0 10px 22px rgba(0,0,0,0.12)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: V.ink, lineHeight: 1.2 }}>
+                    {currentCalendarMoment.title}
+                  </div>
+                  <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.45, color: V.muted }}>
+                    {currentCalendarMoment.note}
+                  </div>
+                </div>
+                <div style={{ flex: "0 0 auto", fontSize: 11, fontWeight: 800, color: V.gold, opacity: 0.9 }}>
+                  {currentCalendarMoment.periodLabel || scenePeriod.label}
+                </div>
               </div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
-                {SCENE_LOCATIONS.map((loc) => (
+                {currentCalendarMoment.choices.map((choice) => (
                   <button
-                    key={loc.id}
+                    key={choice.label}
                     type="button"
-                    onClick={() => appendLifeScene(loc)}
+                    onClick={() => chooseCalendarOption(choice)}
                     disabled={loading}
-                    title={`去${loc.label}`}
+                    title={choice.intent}
                     style={{
                       flex: "0 0 auto",
-                      height: 30,
+                      minHeight: 30,
                       padding: "0 11px",
                       borderRadius: 999,
                       border: `1px solid ${V.lineSoft}`,
-                      background: "rgba(255,250,226,0.06)",
+                      background: "rgba(255,250,226,0.065)",
                       color: loading ? V.faint : V.ink,
                       fontSize: 12,
-                      fontWeight: 600,
+                      fontWeight: 700,
                       fontFamily: "inherit",
                       cursor: loading ? "not-allowed" : "pointer",
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {loc.label}
+                    {choice.label}
                   </button>
                 ))}
-              </div>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
-                {SCENE_TONES.map((tone) => {
-                  const on = sceneToneId === tone.id;
-                  return (
-                    <button
-                      key={tone.id}
-                      type="button"
-                      onClick={() => setSceneToneId(tone.id)}
-                      disabled={loading}
-                      title={tone.instruction}
-                      style={{
-                        flex: "0 0 auto",
-                        height: 26,
-                        padding: "0 10px",
-                        borderRadius: 999,
-                        border: `1px solid ${on ? V.line : V.lineSoft}`,
-                        background: on ? V.accentSoft : "rgba(255,250,226,0.035)",
-                        color: on ? V.gold : V.muted,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        fontFamily: "inherit",
-                        cursor: loading ? "not-allowed" : "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {tone.label}
-                    </button>
-                  );
-                })}
               </div>
             </div>
           )}
