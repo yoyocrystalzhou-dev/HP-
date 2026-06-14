@@ -136,6 +136,7 @@ export default function App() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+  const inputMaxHeight = isMobile ? 220 : 320;
 
   // ── Derived: project / mode / character / active chat window ──
   const activeProject = (activeProjectId && projects[activeProjectId]) || null;
@@ -242,7 +243,7 @@ export default function App() {
       if (!taRef.current) return;
       taRef.current.focus();
       taRef.current.style.height = "auto";
-      taRef.current.style.height = Math.min(taRef.current.scrollHeight, 140) + "px";
+      taRef.current.style.height = Math.min(taRef.current.scrollHeight, inputMaxHeight) + "px";
     });
   };
 
@@ -1559,6 +1560,16 @@ ${transcriptLines(chunk)}`;
             )}
             {HP_KIOSK && (
               <button
+                onClick={() => setPanel("chars")}
+                title="角色设定"
+                style={{ display: "flex", alignItems: "center", gap: isMobile ? 0 : 5, justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+              >
+                <I.User />
+                {!isMobile && <span>角色</span>}
+              </button>
+            )}
+            {HP_KIOSK && (
+              <button
                 onClick={() => setPanel("settings")}
                 title="配置（API Key）"
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
@@ -1806,10 +1817,10 @@ ${transcriptLines(chunk)}`;
               ref={taRef} value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+              onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
               placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
-              rows={1}
-              style={{ flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.5, maxHeight: 140, overflowY: "auto", resize: "none", padding: "4px 0" }}
+              rows={2}
+              style={{ flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.5, minHeight: 48, maxHeight: inputMaxHeight, overflowY: "auto", resize: "vertical", padding: "4px 0" }}
             />
             <button
               onClick={send}

@@ -4,7 +4,7 @@ import { HOUSE_BONUSES, WAND_WOODS, WAND_CORES, formatBonuses } from "../lib/sta
 
 /**
  * 角色创建向导（主控人设）—— 暗黑沉浸风 · 移动优先。
- * 字段：姓名/性别 · 学院 · 血统 · 家世背景 · 相貌 · 魔杖 · 擅长 · 性格。
+ * 字段：姓名/性别 · 学院 · 血统 · 家世背景 · 相貌 · 魔杖 · 擅长 · 性格 · 特殊经历。
  * 产出 player = { name, persona, meta }。
  */
 
@@ -46,6 +46,9 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
   const [subjects, setSubjects] = useState([]);
   const [traits, setTraits] = useState([]);
   const [intro, setIntro] = useState("");
+  const [specialExperience, setSpecialExperience] = useState("");
+  const [hiddenSetting, setHiddenSetting] = useState("");
+  const [gmNotes, setGmNotes] = useState("");
 
   const toggle = (setter, max) => (v) =>
     setter((p) => (p.includes(v) ? p.filter((x) => x !== v) : p.length < max ? [...p, v] : p));
@@ -62,6 +65,7 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
     { title: "选择你的魔杖", sub: "魔杖选择巫师", valid: () => !!wood && !!core },
     { title: "你擅长什么", sub: "最多选 2 门，给判定加成", valid: () => subjects.length > 0 },
     { title: "你的性格", sub: "选标签 + 自由描述（性格、为人、口头禅…）", valid: () => true },
+    { title: "特殊经历", sub: "主控补充、秘密、伏笔、禁止 AI 乱猜的内容", valid: () => true },
   ];
   const cur = steps[step];
   const last = step === steps.length - 1;
@@ -79,11 +83,24 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
       `魔杖：${wood} + ${core}`,
       subjects.length ? `擅长：${subjects.join("、")}` : null,
       traits.length || intro.trim() ? `性格：${[traits.join("、"), intro.trim()].filter(Boolean).join("；")}` : null,
+      specialExperience.trim() ? `特殊经历：${specialExperience.trim()}` : null,
+      hiddenSetting.trim() ? `隐藏设定 / 伏笔：${hiddenSetting.trim()}` : null,
+      gmNotes.trim() ? `主控补充：${gmNotes.trim()}` : null,
     ].filter(Boolean).join("\n");
     onComplete({
       name: name.trim(),
       persona,
-      meta: { gender, house, blood, family, familyDetail: familyDetail.trim(), appearance: appearance.trim(), wand: { wood, core }, subjects, traits },
+      meta: {
+        gender, house, blood, family,
+        familyDetail: familyDetail.trim(),
+        appearance: appearance.trim(),
+        wand: { wood, core },
+        subjects,
+        traits,
+        specialExperience: specialExperience.trim(),
+        hiddenSetting: hiddenSetting.trim(),
+        gmNotes: gmNotes.trim(),
+      },
     });
   };
 
@@ -239,6 +256,41 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
               <div>
                 <div style={label}>性格 / 自我设定</div>
                 <textarea style={{ ...field, minHeight: 96, resize: "none" }} placeholder="描述你的性格、为人、口头禅、立场…（可留空）" value={intro} maxLength={160} onChange={(e) => setIntro(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {step === 8 && (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div>
+                <div style={label}>特殊经历</div>
+                <textarea
+                  style={{ ...field, minHeight: 92, resize: "vertical" }}
+                  placeholder="例如：曾经在麻瓜世界发生过一次无法解释的魔法暴走；小时候见过某个奇怪的黑袍人…（可留空）"
+                  value={specialExperience}
+                  maxLength={500}
+                  onChange={(e) => setSpecialExperience(e.target.value)}
+                />
+              </div>
+              <div>
+                <div style={label}>隐藏设定 / 伏笔</div>
+                <textarea
+                  style={{ ...field, minHeight: 82, resize: "vertical" }}
+                  placeholder="只有主控和旁白知道的设定、秘密、长期伏笔；AI 可以参考，但不能替玩家公开。"
+                  value={hiddenSetting}
+                  maxLength={500}
+                  onChange={(e) => setHiddenSetting(e.target.value)}
+                />
+              </div>
+              <div>
+                <div style={label}>主控补充</div>
+                <textarea
+                  style={{ ...field, minHeight: 82, resize: "vertical" }}
+                  placeholder="你希望旁白长期遵守的补充：关系倾向、禁忌、想玩的主题、不要乱猜的内容…"
+                  value={gmNotes}
+                  maxLength={500}
+                  onChange={(e) => setGmNotes(e.target.value)}
+                />
               </div>
             </div>
           )}

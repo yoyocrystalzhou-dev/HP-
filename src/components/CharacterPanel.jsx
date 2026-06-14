@@ -142,7 +142,12 @@ function CharacterEditor({ char: init, candidates, isPlayer, onSave, onCancel })
       </Field>
 
       <Field label={isPlayer ? "角色描述 / Persona" : "人设 / Persona"}>
-        <Input value={c.persona} onChange={(e) => u("persona", e.target.value)} rows={4} placeholder={isPlayer ? "描述你扮演的角色：身份、性格、背景..." : "描述角色性格、背景、说话风格..."} />
+        <Input
+          value={c.persona}
+          onChange={(e) => u("persona", e.target.value)}
+          rows={isPlayer ? 8 : 4}
+          placeholder={isPlayer ? "描述你扮演的角色：身份、性格、背景、特殊经历、隐藏设定、主控补充、AI 不得乱猜的内容..." : "描述角色性格、背景、说话风格..."}
+        />
       </Field>
 
       {!isPlayer && (
