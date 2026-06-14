@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tavern RP Layout Preview</title>
+  <style>
+    :root {
+      --night: #090c12;
+      --ink: #d9d0b7;
+      --muted: #aaa18d;
+      --faint: #766f63;
+      --gold: #d9c38b;
+      --gold-dim: #8c7446;
+      --red: #8f1e22;
+      --red-lit: #c54845;
+      --blue: #151b26;
+      --blue-2: #202938;
+      --paper: #efe3c4;
+      --paper-2: #d7c296;
+      --shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+      --serif: Georgia, "Noto Serif SC", "Songti SC", serif;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        radial-gradient(circle at 50% -12%, rgba(210, 195, 139, 0.18), transparent 32%),
+        radial-gradient(circle at 18% 18%, rgba(143, 30, 34, 0.28), transparent 34%),
+        radial-gradient(circle at 82% 28%, rgba(55, 82, 116, 0.34), transparent 36%),
+        linear-gradient(135deg, #050609 0%, #101622 42%, #090b10 100%);
+      overflow: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.22;
+      background-image:
+        linear-gradient(30deg, transparent 47%, rgba(217, 195, 139, 0.12) 49%, transparent 51%),
+        linear-gradient(150deg, transparent 47%, rgba(217, 195, 139, 0.09) 49%, transparent 51%);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(circle at 50% 35%, black, transparent 76%);
+    }
+
+    .stage {
+      height: 100vh;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 238px minmax(0, 1fr) 340px;
+      gap: 14px;
+    }
+
+    .frame {
+      min-width: 0;
+      position: relative;
+      border: 1px solid rgba(217, 195, 139, 0.55);
+      background:
+        linear-gradient(180deg, rgba(32, 41, 56, 0.9), rgba(9, 12, 18, 0.94)),
+        repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 9px);
+      box-shadow: var(--shadow), inset 0 0 0 1px rgba(255, 250, 226, 0.05);
+      overflow: hidden;
+    }
+
+    .frame::before, .frame::after {
+      content: "✦";
+      position: absolute;
+      color: rgba(217, 195, 139, 0.72);
+      font-size: 13px;
+      z-index: 2;
+    }
+
+    .frame::before { left: 10px; top: 8px; }
+    .frame::after { right: 10px; bottom: 8px; }
+
+    .left, .right, .main {
+      border-radius: 20px;
+    }
+
+    .left {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+    }
+
+    .brand {
+      padding: 19px 16px 14px;
+      border-bottom: 1px solid rgba(217, 195, 139, 0.22);
+      background: linear-gradient(180deg, rgba(143, 30, 34, 0.28), transparent);
+    }
+
+    .seal-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .seal {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #f2dfaa;
+      font-family: var(--serif);
+      font-weight: 900;
+      background:
+        radial-gradient(circle at 35% 30%, #cf4c45, #8f1e22 48%, #4b0d12 100%);
+      border: 1px solid rgba(255, 223, 158, 0.45);
+      box-shadow: inset 0 2px 8px rgba(255,255,255,0.18), 0 8px 22px rgba(0,0,0,0.36);
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 22px;
+      line-height: 1.1;
+      color: transparent;
+      background: linear-gradient(100deg, #fff4c9 0%, #d9c38b 42%, #8f1e22 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      font-style: italic;
+      letter-spacing: 0.02em;
+      text-shadow: 0 8px 24px rgba(217, 195, 139, 0.22);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .project {
+      margin: 12px;
+      padding: 13px 12px;
+      border: 1px solid rgba(217, 195, 139, 0.34);
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(239, 227, 196, 0.11), rgba(239, 227, 196, 0.04));
+      box-shadow: inset 0 0 26px rgba(0,0,0,0.18);
+    }
+
+    .project-title {
+      font-family: var(--serif);
+      font-size: 15px;
+      color: #f2dfaa;
+      font-weight: 800;
+    }
+
+    .project p {
+      margin: 7px 0 0;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .nav {
+      overflow: auto;
+      padding: 0 10px 12px;
+    }
+
+    .nav button {
+      width: 100%;
+      margin: 4px 0;
+      padding: 10px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      color: var(--muted);
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+    }
+
+    .nav button.active {
+      color: #f4e7bd;
+      border-color: rgba(217, 195, 139, 0.5);
+      background:
+        linear-gradient(90deg, rgba(143, 30, 34, 0.5), rgba(217, 195, 139, 0.08));
+      box-shadow: inset 3px 0 0 var(--red-lit);
+    }
+
+    .count {
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .left-foot {
+      padding: 12px;
+      border-top: 1px solid rgba(217, 195, 139, 0.2);
+    }
+
+    .new-chat {
+      width: 100%;
+      border: 1px solid rgba(217, 195, 139, 0.7);
+      border-radius: 999px;
+      color: #1b1010;
+      background: linear-gradient(180deg, #e7cf8d, #a87a36);
+      padding: 10px;
+      font-weight: 900;
+      font-family: var(--serif);
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .chat-top {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(217, 195, 139, 0.22);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      background:
+        linear-gradient(90deg, rgba(143, 30, 34, 0.2), rgba(217, 195, 139, 0.06), transparent);
+    }
+
+    .chat-top h2 {
+      position: relative;
+      display: inline-block;
+      margin: 0;
+      font-family: var(--serif);
+      color: transparent;
+      background: linear-gradient(92deg, #fff2bd, #d9c38b 58%, #b54842);
+      -webkit-background-clip: text;
+      background-clip: text;
+      font-size: 25px;
+      font-weight: 800;
+      font-style: italic;
+      text-shadow: 0 10px 26px rgba(217, 195, 139, 0.16);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chat-top h2::after {
+      content: "";
+      position: absolute;
+      left: 4px;
+      right: -18px;
+      bottom: -4px;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(217,195,139,0.9), transparent);
+    }
+
+    .chat-top span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .top-tools {
+      display: flex;
+      gap: 7px;
+      flex: 0 0 auto;
+    }
+
+    .tool {
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(217, 195, 139, 0.38);
+      border-radius: 12px;
+      color: var(--gold);
+      background: rgba(239, 227, 196, 0.06);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+    }
+
+    .chat-scroll {
+      overflow: auto;
+      padding: 34px 26px 38px;
+      background:
+        radial-gradient(circle at 15% 8%, rgba(217, 195, 139, 0.09), transparent 32%),
+        linear-gradient(180deg, rgba(10,12,18,0.16), rgba(10,12,18,0.44));
+    }
+
+    .message {
+      max-width: 780px;
+      margin: 0 auto 28px;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .message.user-msg {
+      grid-template-columns: minmax(0, 1fr) 44px;
+    }
+
+    .message.user-msg .avatar {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .message-body {
+      min-width: 0;
+      display: grid;
+      justify-items: start;
+    }
+
+    .message.user-msg .message-body {
+      grid-column: 1;
+      grid-row: 1;
+      justify-self: end;
+      justify-items: end;
+      max-width: min(640px, 100%);
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(217, 195, 139, 0.5);
+      border-radius: 14px;
+      color: var(--gold);
+      background:
+        linear-gradient(180deg, rgba(239, 227, 196, 0.1), rgba(9, 12, 18, 0.5));
+      font-family: var(--serif);
+      font-weight: 900;
+      box-shadow: inset 0 0 18px rgba(0,0,0,0.3);
+    }
+
+    .paper {
+      position: relative;
+      padding: 14px 15px;
+      border: 1px solid rgba(217, 195, 139, 0.58);
+      border-radius: 18px 18px 18px 8px;
+      background:
+        linear-gradient(180deg, rgba(239, 227, 196, 0.96), rgba(214, 194, 150, 0.94)),
+        repeating-linear-gradient(0deg, rgba(92,73,42,0.12) 0 1px, transparent 1px 28px);
+      color: #3c3024;
+      line-height: 1.75;
+      font-size: 14px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.24);
+    }
+
+    .paper::before {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border: 1px solid rgba(143, 30, 34, 0.16);
+      border-radius: 14px 14px 14px 6px;
+      pointer-events: none;
+    }
+
+    .paper.assistant {
+      border-left: 4px solid var(--red);
+    }
+
+    .paper.user {
+      border-left: 4px solid var(--gold-dim);
+      border-radius: 18px 18px 8px 18px;
+      background:
+        linear-gradient(180deg, #f5e8c7, #d7bd83),
+        repeating-linear-gradient(0deg, rgba(92,73,42,0.12) 0 1px, transparent 1px 28px);
+    }
+
+    .paper.user::before {
+      border-radius: 14px 14px 6px 14px;
+    }
+
+    .actions {
+      margin-top: 7px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      opacity: 0.5;
+      padding: 0 8px;
+    }
+
+    .actions button {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(92,73,42,0.18);
+      border-radius: 50%;
+      background: rgba(255, 250, 226, 0.16);
+      color: rgba(97, 75, 47, 0.72);
+      padding: 0;
+      font-size: 10px;
+      font-weight: 800;
+      font-family: var(--sans);
+    }
+
+    .message.user-msg .actions {
+      justify-content: flex-end;
+    }
+
+    .composer {
+      padding: 13px 14px;
+      border-top: 1px solid rgba(217, 195, 139, 0.22);
+      background: rgba(9, 12, 18, 0.74);
+    }
+
+    .composer-box {
+      max-width: 850px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 52px;
+      gap: 9px;
+      align-items: end;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 56px;
+      resize: none;
+      border: 1px solid rgba(217, 195, 139, 0.42);
+      border-radius: 18px;
+      color: #f2dfaa;
+      background: rgba(13, 17, 25, 0.92);
+      padding: 11px 12px;
+      outline: none;
+      font: inherit;
+      line-height: 1.5;
+    }
+
+    textarea::placeholder { color: rgba(217, 195, 139, 0.42); }
+
+    .send {
+      height: 56px;
+      border: 1px solid rgba(217, 195, 139, 0.66);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 35% 25%, #cf4c45, #8f1e22 55%, #4b0d12);
+      color: #f6e4ad;
+      font-weight: 900;
+      box-shadow: inset 0 2px 10px rgba(255,255,255,0.12);
+    }
+
+    .right {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 10px;
+      border-bottom: 1px solid rgba(217, 195, 139, 0.22);
+    }
+
+    .tab {
+      border: 1px solid rgba(217, 195, 139, 0.24);
+      border-radius: 999px;
+      background: rgba(239, 227, 196, 0.04);
+      color: var(--muted);
+      padding: 8px 4px;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .tab.active {
+      color: #f4e7bd;
+      border-color: rgba(217, 195, 139, 0.58);
+      background: rgba(143, 30, 34, 0.32);
+    }
+
+    .context {
+      overflow: auto;
+      padding: 12px;
+      display: grid;
+      gap: 11px;
+      align-content: start;
+    }
+
+    .card {
+      position: relative;
+      padding: 13px;
+      border: 1px solid rgba(217, 195, 139, 0.38);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(239, 227, 196, 0.1), rgba(239, 227, 196, 0.035));
+      box-shadow: inset 0 0 24px rgba(0,0,0,0.22);
+    }
+
+    .card::after {
+      content: "♢";
+      position: absolute;
+      right: 11px;
+      top: 9px;
+      color: rgba(217, 195, 139, 0.38);
+      font-size: 13px;
+    }
+
+    .card h3 {
+      margin: 0 22px 8px 0;
+      font-family: var(--serif);
+      color: #f2dfaa;
+      font-size: 15px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .chip {
+      border: 1px solid rgba(217, 195, 139, 0.28);
+      color: #d9c38b;
+      background: rgba(143, 30, 34, 0.2);
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .meter {
+      margin-top: 10px;
+      height: 6px;
+      border: 1px solid rgba(217, 195, 139, 0.26);
+      border-radius: 999px;
+      background: rgba(0,0,0,0.22);
+      overflow: hidden;
+    }
+
+    .meter > div {
+      height: 100%;
+      width: 68%;
+      background: linear-gradient(90deg, var(--red), var(--gold));
+    }
+
+    .bottom-nav { display: none; }
+
+    @media (max-width: 920px) {
+      body { overflow: hidden; }
+
+      .stage {
+        padding: 0;
+        grid-template-columns: 1fr;
+        grid-template-rows: 58px 1fr 60px;
+        gap: 0;
+      }
+
+      .left {
+        display: block;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: none;
+      }
+
+      .brand {
+        height: 58px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .seal {
+        width: 36px;
+        height: 36px;
+      }
+
+      .brand h1 {
+        font-size: 17px;
+      }
+
+      .brand small {
+        font-size: 10px;
+      }
+
+      .project, .nav, .left-foot { display: none; }
+
+      .main {
+        min-height: 0;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: none;
+      }
+
+      .chat-top {
+        padding: 10px 11px;
+      }
+
+      .chat-top h2 {
+        font-size: 17px;
+      }
+
+      .chat-top span {
+        font-size: 11px;
+      }
+
+      .tool {
+        width: 31px;
+        height: 31px;
+      }
+
+      .top-tools .tool:nth-child(2) { display: none; }
+
+      .chat-scroll {
+        padding: 20px 10px 24px;
+      }
+
+      .message {
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 8px;
+        margin-bottom: 22px;
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+      }
+
+      .paper {
+        padding: 11px;
+        font-size: 13.5px;
+      }
+
+      .actions button {
+        font-size: 10.5px;
+        width: 21px;
+        height: 21px;
+      }
+
+      .composer {
+        padding: 8px 9px;
+      }
+
+      .composer-box {
+        grid-template-columns: 1fr 48px;
+      }
+
+      textarea {
+        min-height: 48px;
+        padding: 9px 10px;
+      }
+
+      .send {
+        height: 48px;
+      }
+
+      .right {
+        position: fixed;
+        left: 9px;
+        right: 9px;
+        bottom: 69px;
+        max-height: 43vh;
+        display: grid;
+        border-radius: 18px;
+        z-index: 4;
+        box-shadow: 0 24px 70px rgba(0,0,0,0.58);
+      }
+
+      .tabs {
+        padding: 8px;
+      }
+
+      .tab {
+        padding: 7px 3px;
+        font-size: 10.5px;
+      }
+
+      .context {
+        max-height: calc(43vh - 48px);
+        padding: 10px;
+      }
+
+      .bottom-nav {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 5px;
+        height: 60px;
+        padding: 6px 7px;
+        border-top: 1px solid rgba(217, 195, 139, 0.32);
+        background: rgba(8, 11, 16, 0.96);
+      }
+
+      .bottom-nav button {
+        border: 1px solid transparent;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 10.5px;
+        font-weight: 900;
+      }
+
+      .bottom-nav button.active {
+        border-color: rgba(217, 195, 139, 0.42);
+        color: #f4e7bd;
+        background: rgba(143, 30, 34, 0.36);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <aside class="frame left">
+      <header class="brand">
+        <div class="seal-row">
+          <div class="seal">✦</div>
+          <div>
+            <h1>Midnight Tavern</h1>
+            <small>Story Archive</small>
+          </div>
+        </div>
+      </header>
+
+      <section class="project">
+        <div class="project-title">爱丽丝梦游仙境</div>
+        <p>长期 RP · 童话暗线 · 规则模拟器<br />当前章节：红皇后的花园</p>
+      </section>
+
+      <nav class="nav">
+        <button class="active"><span>聊天工作台</span><span class="count">主屏</span></button>
+        <button><span>项目文件</span><span class="count">8 / 12</span></button>
+        <button><span>角色卡册</span><span class="count">16</span></button>
+        <button><span>世界书</span><span class="count">42</span></button>
+        <button><span>当前状态</span><span class="count">7</span></button>
+        <button><span>提炼建议</span><span class="count">5</span></button>
+        <button><span>自动化设置</span><span class="count">ON</span></button>
+      </nav>
+
+      <footer class="left-foot">
+        <button class="new-chat">＋ 新建篇章</button>
+      </footer>
+    </aside>
+
+    <main class="frame main">
+      <header class="chat-top">
+        <div>
+          <h2>第 12 幕：茶会之后</h2>
+          <span>项目文件 8 个 · 世界书 6 条 · 当前状态已注入</span>
+        </div>
+        <div class="top-tools">
+          <div class="tool">档</div>
+          <div class="tool">态</div>
+          <div class="tool">设</div>
+        </div>
+      </header>
+
+      <section class="chat-scroll">
+        <article class="message">
+          <div class="avatar">A</div>
+          <div class="message-body">
+            <div class="paper assistant">
+              你穿过倾斜的玫瑰拱门，牌兵们的脚步声在身后逐渐靠近。花园深处传来茶杯轻碰的声音，像某种隐秘的倒计时。
+            </div>
+            <div class="actions">
+              <button title="Regenerate">↻</button>
+              <button title="Copy">⧉</button>
+              <button title="Edit">✎</button>
+              <button title="Delete">⌫</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="message user-msg">
+          <div class="avatar">我</div>
+          <div class="message-body">
+            <div class="paper user">
+              我先把怀表藏进袖口，观察茶桌旁有没有能离开花园的小门。
+            </div>
+            <div class="actions">
+              <button title="Regenerate">↻</button>
+              <button title="Copy">⧉</button>
+              <button title="Edit">✎</button>
+              <button title="Delete">⌫</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="message">
+          <div class="avatar">M</div>
+          <div class="message-body">
+            <div class="paper assistant">
+              疯帽匠没有抬头，只用银匙敲了敲杯沿。小门确实存在，但门把手上系着一张纸条：必须说出今天真正的日期。
+            </div>
+            <div class="actions">
+              <button title="Regenerate">↻</button>
+              <button title="Copy">⧉</button>
+              <button title="Edit">✎</button>
+              <button title="Delete">⌫</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="composer">
+        <div class="composer-box">
+          <textarea placeholder="写下你的行动、对白或旁白..."></textarea>
+          <button class="send">送</button>
+        </div>
+      </footer>
+    </main>
+
+    <aside class="frame right">
+      <div class="tabs">
+        <button class="tab active">文件</button>
+        <button class="tab">状态</button>
+        <button class="tab">角色</button>
+        <button class="tab">建议</button>
+      </div>
+      <div class="context">
+        <section class="card">
+          <h3>项目文件注入</h3>
+          <p>8 个启用档案会进入 prompt，约 14,280 字符。这里快速检查模拟器规则、写作风格、时间线是否已经送入上下文。</p>
+          <div class="chips">
+            <span class="chip">模拟器规则</span>
+            <span class="chip">写作风格</span>
+            <span class="chip">时间线</span>
+          </div>
+          <div class="meter"><div></div></div>
+        </section>
+
+        <section class="card">
+          <h3>当前剧情状态</h3>
+          <p>地点：红皇后的花园。场景：茶会后的追逐。未解决伏线：怀表日期、小门、纸条。</p>
+        </section>
+
+        <section class="card">
+          <h3>自动化</h3>
+          <p>自动提炼、自动总结、自动命名已开启。所有状态写入仍需手动接受。</p>
+        </section>
+      </div>
+    </aside>
+
+    <nav class="bottom-nav">
+      <button class="active">聊天</button>
+      <button>文件</button>
+      <button>状态</button>
+      <button>角色</button>
+      <button>建议</button>
+    </nav>
+  </div>
+</body>
+</html>

@@ -1,0 +1,1836 @@
+import { useState, useRef, useEffect, Fragment } from "react";
+
+import { usePersist }  from "./hooks/usePersist.js";
+import { callAPI, callAPIOnce } from "./lib/api.js";
+import { fileToBase64, matchWorld, uid } from "./lib/utils.js";
+import { store } from "./lib/storage.js";
+import {
+  createProject, createCharacter, createPlayerCharacter, createWorldChat, createCharacterChat,
+  createFact, createStoryEvent, PLAYER_ID,
+  worldChatsOf, characterChatsOf, projectsList,
+  formatFacts, formatStory, formatProjectFiles, formatHistory, formatState, migrateRelationshipTarget,
+  createCurrentState, visibleCurrentState, formatCurrentState,
+  buildMigration, loadLegacy, migrateAll,
+  buildSuggestionPrompt, parseSuggestions, normalizeSuggestions, mergePendingUpdatesWithMeta, applyUpdateToProject, inferProjectTimeSuggestion, inferPresentCharacterSuggestions,
+} from "./lib/projects.js";
+
+import { I }              from "./components/Icons.jsx";
+import Avatar             from "./components/Avatar.jsx";
+import SettingsPanel      from "./components/SettingsPanel.jsx";
+import CharacterPanel     from "./components/CharacterPanel.jsx";
+import MemoryPanel        from "./components/MemoryPanel.jsx";
+import WorldBookPanel     from "./components/WorldBookPanel.jsx";
+import SessionPanel       from "./components/SessionPanel.jsx";
+import ProjectListView    from "./components/ProjectListView.jsx";
+import ProjectSettingsPanel from "./components/ProjectSettingsPanel.jsx";
+import PendingUpdatesPanel from "./components/PendingUpdatesPanel.jsx";
+import CurrentStatePanel  from "./components/CurrentStatePanel.jsx";
+import ProjectFilesPanel   from "./components/ProjectFilesPanel.jsx";
+import { T, applyTheme }  from "./theme.js";
+
+// ── HP 专项：三世代首页 + 内置预设包 ──
+import GenerationSelect    from "./components/GenerationSelect.jsx";
+import CharacterCreator    from "./components/CharacterCreator.jsx";
+import { PRESETS, GENERATIONS } from "./presets/index.js";
+import { instantiatePreset, presetProjectId } from "./lib/loadPreset.js";
+import { currentBeat, canonAnchor, phaseName, advanceTime } from "./lib/timeline.js";
+import { initialStats, formatStatsLine, GATING_RULES, STAMINA_MAX } from "./lib/stats.js";
+import { initialCourses, formatCoursesBlock, COURSES, normalizeCourses } from "./lib/courses.js";
+import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects, examGrade } from "./lib/checks.js";
+import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
+import { favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor } from "./lib/affinity.js";
+import { LIFE_SCENE_RULES, SCENE_LOCATIONS, SCENE_TONES, buildLifeSceneInput } from "./lib/lifeScenes.js";
+import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
+import StatusBar        from "./components/StatusBar.jsx";
+import OcCreator        from "./components/OcCreator.jsx";
+import { NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
+
+// ─── Defaults ─────────────────────────────────────────────────────────────────
+
+const DEFAULT_CONFIG = {
+  apiType: "deepseek",
+  apiKey: "",
+  baseUrl: "https://api.deepseek.com",
+  model: "deepseek-chat",
+  maxTokens: 2048,
+};
+
+const DEFAULT_CHAR = { id: "default", name: "默认助手", avatar: "🤖", persona: "", greeting: "", state: { status: "", relationships: {} }, history: [] };
+const DEFAULT_PLAYER = { id: PLAYER_ID, name: "我", avatar: "🧑", persona: "", state: { status: "", relationships: {} }, history: [] };
+const SUMMARY_KEEP_MESSAGES = 10;
+const SUMMARY_TRIGGER_MESSAGES = 20;
+const SUMMARY_BATCH_MESSAGES = 20;
+const AUTO_EXTRACT_INTERVAL_MESSAGES = 10;
+const AUTO_EXTRACT_WINDOW_MESSAGES = 10;
+const V = T;
+
+// HP 专项：玩家成品模式。世界数据（角色/世界书/记忆/文件/剧情状态）全部内置存储、不暴露
+// 成可视化管理面板；玩家界面只保留对话 + （后续）养成数值。仅留「配置」用于填 API Key。
+const HP_KIOSK = true;
+
+/** Format one relationship entry as a compact line. */
+function formatRel(rel) {
+  if (!rel) return "";
+  const bits = [];
+  if (rel.status) bits.push(`关系：${rel.status}`);
+  if (rel.feeling) bits.push(`感受：${rel.feeling}`);
+  if (rel.note) bits.push(rel.note);
+  return bits.join("；");
+}
+
+/** Look up a relationship toward `entity`, by id first then by name (free-text). */
+function findRel(relationships, entity) {
+  if (!relationships || !entity) return null;
+  return relationships[entity.id] ?? relationships[entity.name] ?? null;
+}
+
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+export default function App() {
+  // ── Persisted ──
+  const [config,          setConfig,          cfgReady]  = usePersist("config",          DEFAULT_CONFIG);
+  const [projects,        setProjects,        projReady] = usePersist("projects",        {});
+  const [sessions,        setSessions,        sessReady] = usePersist("sessions",        {});
+  const [activeProjectId, setActiveProjectId, apidReady] = usePersist("activeProjectId", null);
+  const [themeMode,       setThemeMode,       themeReady] = usePersist("themeMode",       "dark");
+
+  const ready = cfgReady && projReady && sessReady && apidReady && themeReady;
+
+  // Apply the active palette in place, then bump a nonce to re-render the tree
+  // so every inline style re-reads the mutated `T`. (See theme.js.)
+  const [themeNonce, setThemeNonce] = useState(0);
+  useEffect(() => {
+    applyTheme(themeMode);
+    setThemeNonce((n) => n + 1);
+  }, [themeMode]);
+  const toggleTheme = () => setThemeMode((m) => (m === "dark" ? "light" : "dark"));
+
+  // ── Ephemeral ──
+  const [hpHome,      setHpHome]      = useState(true); // HP 专项：是否停在三世代首页
+  const [creatingPresetId, setCreatingPresetId] = useState(null); // 正在为哪个世代创建角色
+  const [statsOpen,   setStatsOpen]   = useState(false); // 移动端数值底部抽屉
+  const [ocCreatorOpen, setOcCreatorOpen] = useState(false); // 原创角色创建
+  const [view,        setView]        = useState("workspace"); // "workspace" | "projects"
+  const [panel,       setPanel]       = useState(null);
+  const [input,       setInput]       = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [loading,     setLoading]     = useState(false);
+  const [extracting,   setExtracting]  = useState(false);
+  const [status,      setStatus]      = useState("");
+  const [sceneToneId, setSceneToneId]  = useState("open");
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [editDraft,   setEditDraft]   = useState("");
+
+  const endRef  = useRef(null);
+  const fileRef = useRef(null);
+  const taRef   = useRef(null);
+  const extractingRef = useRef(false);
+
+  // ── Responsive ──
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // ── Derived: project / mode / character / active chat window ──
+  const activeProject = (activeProjectId && projects[activeProjectId]) || null;
+
+  // HP 专项：当前项目对应的内置预设（世界数据不落盘，按 id 反查）+ 原著时间线节点
+  const activePreset = activeProjectId?.startsWith("hp-")
+    ? PRESETS[activeProjectId.slice(3)] || null
+    : null;
+  const canonTimeline = activePreset?.canonTimeline || [];
+  const currentCanonBeat = currentBeat(activeProject?.currentTimeLabel, canonTimeline);
+
+  const projectChars  = activeProject?.characters || [];
+  const charsById     = Object.fromEntries(projectChars.map((c) => [c.id, c]));
+  const player        = activeProject?.playerCharacter || DEFAULT_PLAYER;
+  const nameMap       = { ...charsById, [player.id]: player };
+  // HP 专项：好感度列表（canon + OC，好感度>0）
+  const charNameById  = Object.fromEntries([
+    ...projectChars.map((c) => [c.id, c.name]),
+    ...((activeProject?.ocs || []).map((o) => [o.id, o.name])),
+  ]);
+  const favorList     = Object.entries(player.favor || {})
+    .filter(([, v]) => Number(v) > 0)
+    .map(([id, v]) => ({ name: charNameById[id] || id, value: v }))
+    .sort((a, b) => b.value - a.value);
+  const activeMode    = activeProject?.activeMode || "world";
+  const activeCharId  = activeProject?.activeCharId || null;
+  const activeChar    = projectChars.find((c) => c.id === activeCharId) || projectChars[0] || DEFAULT_CHAR;
+  const scopeChar     = activeMode === "character" ? activeChar : null;
+
+  const activeSessionId  = activeMode === "world"
+    ? (activeProject?.activeWorldChatId || null)
+    : (scopeChar?.activeChatId || null);
+  const activeSessionObj = activeSessionId ? sessions[activeSessionId] : null;
+  const messages    = activeSessionObj?.messages || [];
+
+  const worldBook   = activeProject?.worldBook   || [];
+  const projectFiles = activeProject?.files || [];
+  const worldMemory = activeProject?.worldMemory || [];
+  const storyMemory = activeProject?.storyMemory || [];
+
+  const worldChatList = worldChatsOf(sessions, activeProject);
+  const charChatList  = characterChatsOf(sessions, scopeChar);
+  const currentChatList = activeMode === "world" ? worldChatList : charChatList;
+
+  const pendingUpdates = activeProject?.pendingUpdates || [];
+  const idNameMap = Object.fromEntries([...projectChars, player].map((c) => [c.id, c.name]));
+  const chatNameMap = Object.fromEntries(Object.values(sessions).map((s) => [s.id, s.name]));
+
+  // ── Scroll to bottom ──
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [sessions, activeProjectId, activeSessionId]);
+
+  // ── Writers ──
+  const patchProject = (fn) => {
+    if (!activeProjectId) return;
+    setProjects((prev) => {
+      const p = prev[activeProjectId];
+      if (!p) return prev;
+      const patched = typeof fn === "function" ? fn(p) : { ...p, ...fn };
+      return { ...prev, [activeProjectId]: { ...patched, updatedAt: Date.now() } };
+    });
+  };
+
+  const patchSession = (fn) => {
+    if (!activeSessionId) return;
+    setSessions((prev) => {
+      const s = prev[activeSessionId] || {};
+      const patched = typeof fn === "function" ? fn(s) : { ...s, ...fn };
+      return { ...prev, [activeSessionId]: { ...patched, updatedAt: Date.now() } };
+    });
+  };
+
+  const setMessages = (fn) =>
+    patchSession((s) => ({ ...s, messages: typeof fn === "function" ? fn(s.messages || []) : fn }));
+
+  // Memory writers (project-level; manual only this round — no auto extraction)
+  const setStoryMemory = (fn) =>
+    patchProject((p) => ({ ...p, storyMemory: typeof fn === "function" ? fn(p.storyMemory || []) : fn }));
+  const setWorldMemory = (fn) =>
+    patchProject((p) => ({ ...p, worldMemory: typeof fn === "function" ? fn(p.worldMemory || []) : fn }));
+  const setWorldBook = (fn) =>
+    patchProject((p) => ({ ...p, worldBook: typeof fn === "function" ? fn(p.worldBook || []) : fn }));
+  const setProjectFiles = (fn) =>
+    patchProject((p) => ({ ...p, files: typeof fn === "function" ? fn(p.files || []) : fn }));
+
+  const appendLifeScene = (location) => {
+    const tone = SCENE_TONES.find((t) => t.id === sceneToneId) || SCENE_TONES[0];
+    const text = buildLifeSceneInput(location, tone);
+    setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
+    requestAnimationFrame(() => {
+      if (!taRef.current) return;
+      taRef.current.focus();
+      taRef.current.style.height = "auto";
+      taRef.current.style.height = Math.min(taRef.current.scrollHeight, 140) + "px";
+    });
+  };
+
+  // ── One-time migration: v0 (pre-Project) and v1 → v2 ──
+  const migrationRan = useRef(false);
+  useEffect(() => {
+    if (!ready || migrationRan.current) return;
+    migrationRan.current = true;
+    (async () => {
+      if (Object.keys(projects).length === 0) {
+        // HP 专项：不创建通用默认项目。世界由「世代预设包」按需载入（见 enterGeneration）。
+        // 仅在存在 v0/v1 旧数据时才迁移导入。
+        const legacy = await loadLegacy();
+        const r = buildMigration(legacy);
+        if (r) {
+          await store.set("migrationBackup", legacy);
+          const up = migrateAll({ [r.project.id]: r.project }, { ...sessions, ...r.sessionsMap });
+          setSessions(up.sessions);
+          setProjects(up.projects);
+          setActiveProjectId(Object.keys(up.projects)[0]);
+          setStatus("已导入历史数据 ✓");
+          setTimeout(() => setStatus(""), 3000);
+        }
+      } else {
+        const up = migrateAll(projects, sessions);
+        if (up.changed) {
+          // Preserve the earliest pre-upgrade snapshot; also keep a rolling latest.
+          const hadBackup = await store.get("backup_v1");
+          if (!hadBackup) await store.set("backup_v1", { projects, sessions });
+          await store.set("backup_latest", { projects, sessions });
+          setSessions(up.sessions);
+          setProjects(up.projects);
+          setStatus("数据已升级 ✓");
+          setTimeout(() => setStatus(""), 3000);
+        }
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  // ── Project CRUD ──
+  const projectArr = projectsList(projects);
+
+  const createNewProject = () => {
+    const p = createProject({ name: `项目 ${Object.keys(projects).length + 1}` });
+    setProjects((prev) => ({ ...prev, [p.id]: p }));
+    setActiveProjectId(p.id);
+    setView("workspace");
+    setPanel("project");
+  };
+
+  // HP 专项：从首页进入某个世代。已有存档 → 直接续玩；否则 → 进入角色创建。
+  const enterGeneration = (presetId) => {
+    const preset = PRESETS[presetId];
+    if (!preset) return;
+    const id = presetProjectId(presetId);
+    if (projects[id]) {
+      setActiveProjectId(id);
+      setView("workspace");
+      setPanel(null);
+      setHpHome(false);
+    } else {
+      setCreatingPresetId(presetId);
+    }
+  };
+
+  // 原创角色：加入 / 移除（存玩家层 project.ocs）
+  const addOc = (oc) => {
+    patchProject((p) => ({ ...p, ocs: [...(p.ocs || []), createOC(oc)] }));
+    setOcCreatorOpen(false);
+  };
+  const removeOc = (id) => patchProject((p) => ({ ...p, ocs: (p.ocs || []).filter((o) => o.id !== id) }));
+
+  // P-G：重新开始（清除当前世代存档 → 重新创建角色）
+  const restartGame = () => {
+    if (typeof window !== "undefined" && !window.confirm("确定重新开始？当前存档（角色、进度、关系、原创角色）将被清除。")) return;
+    const id = activeProjectId;
+    const presetId = id?.startsWith("hp-") ? id.slice(3) : null;
+    const proj = projects[id];
+    const victimIds = [...(proj?.worldChatIds || []), ...((proj?.characters || []).flatMap((c) => c.chatIds || []))];
+    setSessions((prev) => { const n = { ...prev }; victimIds.forEach((s) => delete n[s]); return n; });
+    setProjects((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    setActiveProjectId(null);
+    setStatsOpen(false);
+    setPanel(null);
+    if (presetId) setCreatingPresetId(presetId);
+    else setHpHome(true);
+  };
+
+  // 角色创建完成 → 用玩家角色实例化预设，进入世界。
+  const finishCreation = (player) => {
+    const presetId = creatingPresetId;
+    const preset = PRESETS[presetId];
+    if (!preset) return;
+    const id = presetProjectId(presetId);
+    const playerWithStats = { ...player, stats: initialStats(player.meta), courses: initialCourses(player.meta) }; // 出身生成初始数值 + 课程
+    const proj = instantiatePreset(preset, { id, player: playerWithStats });
+    setProjects((prev) => ({ ...prev, [id]: proj }));
+    setActiveProjectId(id);
+    setView("workspace");
+    setPanel(null);
+    setCreatingPresetId(null);
+    setHpHome(false);
+  };
+
+  const openProject = (id) => {
+    setActiveProjectId(id);
+    setView("workspace");
+    setPanel(null);
+  };
+
+  const saveProjectSettings = (patch) => {
+    patchProject((p) => ({ ...p, ...patch }));
+    setStatus("项目已保存 ✓");
+    setTimeout(() => setStatus(""), 2000);
+    setPanel(null);
+  };
+
+  // Phase 5-2A: save the three editable current-state fields, preserving any
+  // list fields (recentEvents etc.) that this minimal panel doesn't touch.
+  const saveCurrentState = (patch) => {
+    patchProject((p) => ({ ...p, currentState: createCurrentState({ ...p.currentState, ...patch }) }));
+    setStatus("剧情状态已保存 ✓");
+    setTimeout(() => setStatus(""), 2000);
+    setPanel(null);
+  };
+
+  const deleteProject = (id) => {
+    if (Object.keys(projects).length <= 1) return;
+    const proj = projects[id];
+    const victimIds = [
+      ...(proj?.worldChatIds || []),
+      ...(proj?.characters || []).flatMap((c) => c.chatIds || []),
+    ];
+    setSessions((prev) => { const n = { ...prev }; victimIds.forEach((sid) => delete n[sid]); return n; });
+    setProjects((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    if (activeProjectId === id) {
+      const remaining = Object.keys(projects).filter((k) => k !== id);
+      setActiveProjectId(remaining[0] || null);
+    }
+    setView("projects");
+    setPanel(null);
+  };
+
+  // ── Ensure the active scope always has a chat window ──
+  useEffect(() => {
+    if (!ready || !activeProject) return;
+    if (activeMode === "world") {
+      const ids = activeProject.worldChatIds || [];
+      if (ids.length === 0) {
+        const wc = createWorldChat(activeProject.id, "世界聊天 1");
+        setSessions((p) => ({ ...p, [wc.id]: wc }));
+        patchProject((p) => ({ ...p, worldChatIds: [wc.id], activeWorldChatId: wc.id }));
+      } else if (!activeProject.activeWorldChatId || !sessions[activeProject.activeWorldChatId]) {
+        patchProject((p) => ({ ...p, activeWorldChatId: ids[0] }));
+      }
+    } else {
+      const ch = projectChars.find((c) => c.id === activeProject.activeCharId) || projectChars[0];
+      if (!ch) return;
+      const ids = ch.chatIds || [];
+      if (ids.length === 0) {
+        const cc = createCharacterChat(activeProject.id, ch.id, "对话 1", ch.greeting);
+        setSessions((p) => ({ ...p, [cc.id]: cc }));
+        patchProject((p) => ({ ...p, characters: p.characters.map((c) => c.id === ch.id ? { ...c, chatIds: [cc.id], activeChatId: cc.id } : c) }));
+      } else if (!ch.activeChatId || !sessions[ch.activeChatId]) {
+        patchProject((p) => ({ ...p, characters: p.characters.map((c) => c.id === ch.id ? { ...c, activeChatId: ids[0] } : c) }));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, activeProjectId, activeMode, activeProject?.activeCharId, activeProject?.worldChatIds?.length, scopeChar?.chatIds?.length]);
+
+  // ── Mode / scope switching ──
+  const switchToWorld = () => { patchProject((p) => ({ ...p, activeMode: "world" })); setPanel(null); };
+  const handleCharSelect = (id) => {
+    patchProject((p) => ({ ...p, activeMode: "character", activeCharId: id }));
+    setPanel(null);
+  };
+
+  // ── Chat-window CRUD (scope-aware) ──
+  const newChat = () => {
+    if (!activeProject) return;
+    if (activeMode === "world") {
+      const n = (activeProject.worldChatIds || []).length + 1;
+      const wc = createWorldChat(activeProject.id, `世界聊天 ${n}`);
+      setSessions((p) => ({ ...p, [wc.id]: wc }));
+      patchProject((p) => ({ ...p, worldChatIds: [wc.id, ...(p.worldChatIds || [])], activeWorldChatId: wc.id }));
+    } else {
+      const ch = scopeChar;
+      if (!ch) return;
+      const n = (ch.chatIds || []).length + 1;
+      const cc = createCharacterChat(activeProject.id, ch.id, `对话 ${n}`, ch.greeting);
+      setSessions((p) => ({ ...p, [cc.id]: cc }));
+      patchProject((p) => ({ ...p, characters: p.characters.map((c) => c.id === ch.id ? { ...c, chatIds: [cc.id, ...(c.chatIds || [])], activeChatId: cc.id } : c) }));
+    }
+    setPanel(null);
+  };
+
+  const selectChat = (id) => {
+    if (activeMode === "world") patchProject((p) => ({ ...p, activeWorldChatId: id }));
+    else patchProject((p) => ({ ...p, characters: p.characters.map((c) => c.id === scopeChar.id ? { ...c, activeChatId: id } : c) }));
+    setPanel(null);
+  };
+
+  const renameChat = (id, name) => {
+    setSessions((p) => (p[id] ? { ...p, [id]: { ...p[id], name } } : p));
+  };
+
+  const saveChatSummary = (id, summary) => {
+    setSessions((p) => (p[id] ? { ...p, [id]: { ...p[id], summary, summaryUntil: summary ? (p[id].summaryUntil || 0) : 0, updatedAt: Date.now() } } : p));
+  };
+
+  const clearChatSummary = (id) => {
+    setSessions((p) => (p[id] ? { ...p, [id]: { ...p[id], summary: "", summaryUntil: 0, updatedAt: Date.now() } } : p));
+  };
+
+  const summarizeChatNow = async (id) => {
+    if (loading) return;
+    const session = sessions[id];
+    if (!session) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+    setLoading(true);
+    try {
+      const updated = await updateChatSummary(id, session.messages || [], { force: true });
+      if (!updated) {
+        setStatus("没有足够旧消息可总结");
+        setTimeout(() => setStatus(""), 2200);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isDefaultChatName = (name = "") =>
+    /^(世界聊天|对话)\s*\d+$/.test(name.trim()) || name.trim() === "新对话";
+
+  const titleFromText = (text) => {
+    const cleaned = String(text || "")
+      .replace(/\s+/g, " ")
+      .replace(/[。！？!?，,；;：:]+$/g, "")
+      .trim();
+    if (!cleaned) return "";
+    return cleaned.length > 18 ? `${cleaned.slice(0, 18)}…` : cleaned;
+  };
+
+  const maybeAutoNameChat = (sid, text) => {
+    if (!activeProject?.autoNameChats || !sid) return;
+    const title = titleFromText(text);
+    if (!title) return;
+    setSessions((prev) => {
+      const s = prev[sid];
+      if (!s || !isDefaultChatName(s.name)) return prev;
+      return { ...prev, [sid]: { ...s, name: title, updatedAt: Date.now() } };
+    });
+  };
+
+  const deleteChat = (id) => {
+    if (!activeProject) return;
+    if (activeMode === "world") {
+      const ids = activeProject.worldChatIds || [];
+      if (ids.length <= 1) return;
+      const newIds = ids.filter((x) => x !== id);
+      setSessions((p) => { const n = { ...p }; delete n[id]; return n; });
+      patchProject((p) => ({ ...p, worldChatIds: newIds, activeWorldChatId: p.activeWorldChatId === id ? newIds[0] : p.activeWorldChatId }));
+    } else {
+      const ch = scopeChar;
+      const ids = ch.chatIds || [];
+      if (ids.length <= 1) return;
+      const newIds = ids.filter((x) => x !== id);
+      setSessions((p) => { const n = { ...p }; delete n[id]; return n; });
+      patchProject((p) => ({ ...p, characters: p.characters.map((c) => c.id === ch.id ? { ...c, chatIds: newIds, activeChatId: c.activeChatId === id ? newIds[0] : c.activeChatId } : c) }));
+    }
+  };
+
+  // ── Character management ──
+  const handleCharEdit = (ch) => {
+    patchProject((p) => {
+      const i = p.characters.findIndex((c) => c.id === ch.id);
+      if (i >= 0) {
+        const cur = p.characters[i];
+        const merged = {
+          ...cur, ...ch,
+          state: ch.state ?? cur.state,
+          history: ch.history ?? cur.history,
+          chatIds: cur.chatIds,
+          activeChatId: cur.activeChatId,
+        };
+        const arr = [...p.characters];
+        arr[i] = merged;
+        return { ...p, characters: arr };
+      }
+      return { ...p, characters: [...p.characters, createCharacter(ch)] };
+    });
+  };
+
+  const handlePlayerEdit = (pc) => {
+    patchProject((p) => ({ ...p, playerCharacter: createPlayerCharacter({ ...(p.playerCharacter || {}), ...pc }) }));
+  };
+
+  // 6A-2C: batch-create characters from TXT drafts in a single patchProject.
+  const handleImportChars = (drafts) => {
+    const valid = (drafts || []).filter((d) => d && d.name);
+    if (valid.length === 0) return;
+    patchProject((p) => ({
+      ...p,
+      characters: [...p.characters, ...valid.map((d) => createCharacter({ name: d.name, persona: d.persona, avatar: d.avatar }))],
+    }));
+    setStatus(`已导入 ${valid.length} 个角色 ✓`);
+    setTimeout(() => setStatus(""), 2000);
+  };
+
+  const handleCharDelete = (id) => {
+    if (!activeProject || projectChars.length <= 1) return;
+    const victim = projectChars.find((c) => c.id === id);
+    if (!victim) return;
+    const victimName = victim.name || id;
+    const victimChatIds = victim.chatIds || [];
+    setSessions((p) => { const n = { ...p }; victimChatIds.forEach((sid) => delete n[sid]); return n; });
+    patchProject((p) => {
+      // Drop the character, and downgrade any relationship that targeted it by
+      // id to a free-text NPC keyed by its name (preserve the relationship).
+      const chars = p.characters
+        .filter((c) => c.id !== id)
+        .map((c) => ({ ...c, state: { ...c.state, relationships: migrateRelationshipTarget(c.state?.relationships, id, victimName) } }));
+      const playerCharacter = p.playerCharacter
+        ? { ...p.playerCharacter, state: { ...p.playerCharacter.state, relationships: migrateRelationshipTarget(p.playerCharacter.state?.relationships, id, victimName) } }
+        : p.playerCharacter;
+      const nextCharId = p.activeCharId === id ? chars[0]?.id : p.activeCharId;
+      const nextMode = p.activeMode === "character" && p.activeCharId === id ? "world" : p.activeMode;
+      return { ...p, characters: chars, playerCharacter, activeCharId: nextCharId, activeMode: nextMode };
+    });
+  };
+
+  // ── Build system prompt (mode-aware; shared-state block + this-window block) ──
+  const buildSystem = (userText) => {
+    const parts = [];
+    if (activeProject?.instructions?.trim()) parts.push(activeProject.instructions.trim());
+
+    const projectFileBlocks = formatProjectFiles(projectFiles);
+    if (projectFileBlocks.length) parts.push(`【项目文件】\n${projectFileBlocks.join("\n\n")}`);
+
+    const triggered = matchWorld(worldBook, userText);
+    if (triggered.length)
+      parts.push(`【世界书】\n${triggered.map((e) => `[${e.title}]\n${e.content}`).join("\n\n")}`);
+
+    // Phase 5: current-state snapshot. CharacterChat sees only the visible subset.
+    const csVisible = visibleCurrentState(activeProject?.currentState, {
+      mode: activeMode,
+      charId: activeMode === "character" ? activeChar?.id : null,
+    });
+    const csFmt = formatCurrentState(csVisible, { nameMap });
+    if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
+    // HP 专项：注入当前时间对应的原著剧情锚点（防跑偏）。位于硬规则之下、当前状态之上。
+    if (currentCanonBeat) parts.push(canonAnchor(currentCanonBeat));
+    if (csFmt.stateLines.length) parts.push(`【当前剧情状态】\n${csFmt.stateLines.join("\n")}`);
+    if (csFmt.forbidden.length)
+      parts.push(`【严格约束（不得违反）】\n- 只能基于上述【当前剧情状态】推进，不得编造状态之外的剧情进展。\n- 禁止假设：\n  - ${csFmt.forbidden.join("\n  - ")}`);
+
+    const facts = formatFacts(worldMemory);
+    if (facts.length) parts.push(`【世界客观事实】\n- ${facts.join("\n- ")}`);
+
+    const story = formatStory(storyMemory);
+    if (story.length) parts.push(`【主线剧情进度】\n- ${story.join("\n- ")}`);
+
+    if (activeMode === "world") {
+      // Cast: all characters' persona + current State (compact). No full histories.
+      const cast = projectChars.map((c) => {
+        const seg = [`【角色：${c.name}】`];
+        if (c.persona?.trim()) seg.push(c.persona.trim());
+        const st = formatState(c.state, nameMap);
+        if (st.length) seg.push(`(状态) ${st.join("；")}`);
+        return seg.join("\n");
+      });
+      if (cast.length) parts.push(cast.join("\n\n"));
+      // HP 专项：玩家原创角色（OC）+ 规则
+      const ocBlock = formatOcs(activeProject?.ocs);
+      if (ocBlock) { parts.push(ocBlock); parts.push(OC_GUARD); }
+      // HP 专项：好感度（玩家与角色的关系）
+      const favorNameById = Object.fromEntries([
+        ...projectChars.map((c) => [c.id, c.name]),
+        ...(activeProject?.ocs || []).map((o) => [o.id, o.name]),
+      ]);
+      const favorBlock = formatFavorBlock(player.favor, favorNameById);
+      if (favorBlock) parts.push(favorBlock);
+      // HP 专项：注入玩家数值 + 数值/好感度门槛裁决规则（防止自由叙述空口越过数值门槛）
+      if (player.stats) { parts.push(formatStatsLine(player.stats)); parts.push(formatCoursesBlock(player.courses)); parts.push(GATING_RULES); }
+      parts.push(LIFE_SCENE_RULES);
+      parts.push(DAILY_GROWTH_RULES);
+      // Player character — the user's own role in the world.
+      const pseg = [`【玩家角色（用户扮演）：${player.name}】`];
+      if (player.persona?.trim()) pseg.push(player.persona.trim());
+      const pst = formatState(player.state, nameMap);
+      if (pst.length) pseg.push(`(状态) ${pst.join("；")}`);
+      parts.push(pseg.join("\n"));
+      parts.push(`你是这个世界的旁白。用户扮演「${player.name}」。请进行场景描写、推进剧情，并在需要时扮演任意出场角色（用「角色名：」标明发言），但不要替「${player.name}」作主。保持与上述世界状态一致。`);
+    } else {
+      // Single character POV. Never inject OTHER AI characters' state/history.
+      if (activeChar?.persona?.trim()) parts.push(`【你的角色：${activeChar.name}】\n${activeChar.persona.trim()}`);
+      const st = formatState(activeChar.state, nameMap);
+      if (st.length) parts.push(`【你的当前状态】\n- ${st.join("\n- ")}`);
+      const hist = formatHistory(activeChar.history);
+      if (hist.length) parts.push(`【你的经历】\n- ${hist.join("\n- ")}`);
+      // Player identity — Character POV. Hard, structured anti-fabrication rule.
+      // Only publicly-knowable player fields; never the player's own
+      // relationships / feelings / notes / history.
+      parts.push(
+        `【玩家资料】\n` +
+        `姓名：${player.name}\n` +
+        `身份资料：${player.persona?.trim() || "未提供"}\n` +
+        `当前状态：${player.state?.status?.trim() || "未提供"}`
+      );
+
+      // Does THIS character actually know the player? Deterministic checks only:
+      // own relationship toward the player, or the player's name literally
+      // appearing in this character's history / StoryMemory / WorldMemory.
+      const c2p = findRel(activeChar.state?.relationships, player);
+      const nameHit = (txt) => !!player.name && (txt || "").includes(player.name);
+      const inHistory = (activeChar.history || []).some((h) => nameHit(h.content));
+      const inPublic = storyMemory.some((e) => nameHit(e.content)) || worldMemory.some((f) => nameHit(f.content));
+      const acquainted = !!c2p || inHistory || inPublic;
+
+      const relLines = ["【你与玩家的已知关系】"];
+      if (c2p) relLines.push(`你对「${player.name}」的既有关系：${formatRel(c2p)}`);
+      if (inHistory || inPublic) relLines.push(`你与「${player.name}」相关的已知信息见上方"你的经历" / 主线剧情 / 世界客观事实，可据此回答。`);
+      if (!acquainted) {
+        relLines.push(`未建立 / 未知。你没有关于该玩家的既有记忆。`);
+        relLines.push(`你必须表现为初次见到对方、或不确定其身份。`);
+        relLines.push(`禁止编造上次见面、共同经历、玩家性格、穿着、习惯或你与对方的关系。`);
+      }
+      parts.push(relLines.join("\n"));
+
+      parts.push(
+        `【严格限制】\n` +
+        `如果用户询问玩家的身份、背景、关系、阵营、家族、职业、亲属、经历，而资料中没有明确写出：\n` +
+        `你必须回答"不清楚"或"我不知道"。\n` +
+        `禁止猜测。\n` +
+        `禁止补全。\n` +
+        `禁止基于世界观常识推断。\n` +
+        `禁止把可能性说成事实。`
+      );
+      parts.push(
+        `【回答规则】\n` +
+        `- 已写入玩家资料的信息：可以确定回答。\n` +
+        `- 只存在于当前角色 State/History 的信息：可以按当前角色视角回答。\n` +
+        `- 只存在于 StoryMemory/WorldMemory 的公开信息：可以回答。\n` +
+        `- 其他全部视为未知。`
+      );
+      parts.push(`请以「${activeChar.name}」的身份，第一人称与「${player.name}」一对一对话。只基于你自己的认知与世界共享信息，不要替其他角色或「${player.name}」作主。`);
+    }
+
+    // This-window local recap (cross-window continuity comes from shared state above).
+    if (activeSessionObj?.summary?.trim()) parts.push(`【本对话前情提要】\n${activeSessionObj.summary.trim()}`);
+
+    return parts.join("\n\n").trim();
+  };
+
+  const extractUpdateSuggestions = async ({ userText, aiText, dialogueText = "", auto = false, openPanel = false, blocking = true }) => {
+    if (!userText && !aiText && !dialogueText) { setStatus("没有可提炼的内容"); setTimeout(() => setStatus(""), 2500); return false; }
+    if (!blocking && extractingRef.current) return false;
+
+    if (blocking) setLoading(true);
+    else { extractingRef.current = true; setExtracting(true); }
+    setStatus(auto ? "自动提炼建议中…" : "提炼建议中…");
+    try {
+      const prompt = buildSuggestionPrompt({ mode: activeMode, userText, aiText, dialogueText, activeChar: scopeChar || activeChar, player, characters: projectChars, currentTimeLabel: activeProject.currentTimeLabel, currentState: activeProject.currentState });
+      const raw = await callAPIOnce(config, prompt);
+      const scanText = dialogueText || userText;
+      const inferredTime = inferProjectTimeSuggestion({ userText: scanText, aiText, currentTimeLabel: activeProject.currentTimeLabel });
+      const inferredPresent = inferPresentCharacterSuggestions({ userText: scanText, aiText, characters: projectChars, player, currentState: activeProject.currentState });
+      const parsed = [...parseSuggestions(raw), ...(inferredTime ? [inferredTime] : []), ...inferredPresent];
+      const pend = normalizeSuggestions(parsed, {
+        project: activeProject, sourceChatId: activeSessionId, sourceKind: activeMode,
+        mode: activeMode, activeChar: scopeChar || activeChar, player,
+        currentTimeLabel: activeProject.currentTimeLabel,
+      });
+      if (pend.length === 0) {
+        if (!auto) {
+          setStatus("没有新的建议");
+          setTimeout(() => setStatus(""), 2500);
+        } else {
+          setStatus("");
+        }
+        return true;
+      } else {
+        const merged = mergePendingUpdatesWithMeta(pend, pendingUpdates);
+        patchProject((p) => ({ ...p, pendingUpdates: mergePendingUpdatesWithMeta(pend, p.pendingUpdates || []).updates }));
+        setStatus(`${auto ? "自动生成" : "生成"} ${pend.length} 条建议${merged.mergedCount ? `，合并 ${merged.mergedCount} 条重复` : ""}`);
+        setTimeout(() => setStatus(""), 2500);
+        if (openPanel) setPanel("pending");
+        return true;
+      }
+    } catch {
+      if (!auto) {
+        setStatus("提炼失败");
+        setTimeout(() => setStatus(""), 3000);
+      } else {
+        setStatus("");
+      }
+      return false;
+    } finally {
+      if (blocking) setLoading(false);
+      else { extractingRef.current = false; setExtracting(false); }
+    }
+  };
+
+  // ── Phase 4A: suggestion generation (manual; never auto-writes) ──
+  const generateSuggestions = async () => {
+    if (loading || extractingRef.current) return;
+    if (!config.apiKey) { setStatus("⚠ 请先填写 API Key"); setTimeout(() => setStatus(""), 3000); return; }
+    if (!activeSessionObj) return;
+    const msgs = activeSessionObj.messages || [];
+    const recentMessages = msgs.filter((m) => !m.streaming).slice(-AUTO_EXTRACT_WINDOW_MESSAGES);
+    const dialogueText = transcriptLines(recentMessages);
+    const quickRaw = [
+      inferProjectTimeSuggestion({ userText: dialogueText, currentTimeLabel: activeProject.currentTimeLabel }),
+      ...inferPresentCharacterSuggestions({ userText: dialogueText, characters: projectChars, player, currentState: activeProject.currentState }),
+    ].filter(Boolean);
+    const quickPend = normalizeSuggestions(quickRaw, {
+      project: activeProject, sourceChatId: activeSessionId, sourceKind: activeMode,
+      mode: activeMode, activeChar: scopeChar || activeChar, player,
+      currentTimeLabel: activeProject.currentTimeLabel,
+    });
+    if (quickPend.length) {
+      patchProject((p) => ({ ...p, pendingUpdates: mergePendingUpdatesWithMeta(quickPend, p.pendingUpdates || []).updates }));
+      setPanel("pending");
+      setStatus(`先生成 ${quickPend.length} 条快速建议，继续后台提炼…`);
+    }
+    await extractUpdateSuggestions({ dialogueText, openPanel: true, blocking: false });
+  };
+
+  // Accept (only write path) / reject — all user-driven.
+  const acceptUpdate = (id, editedValue, editedDate) => {
+    patchProject((p) => {
+      const pu0 = (p.pendingUpdates || []).find((x) => x.id === id);
+      if (!pu0) return p;
+      const pu = editedDate !== undefined ? { ...pu0, date: editedDate } : pu0;
+      const np = applyUpdateToProject(p, pu, editedValue);
+      return { ...np, pendingUpdates: (p.pendingUpdates || []).filter((x) => x.id !== id) };
+    });
+  };
+  const rejectUpdate = (id) =>
+    patchProject((p) => ({ ...p, pendingUpdates: (p.pendingUpdates || []).filter((x) => x.id !== id) }));
+  const rejectAllUpdates = () =>
+    patchProject((p) => ({ ...p, pendingUpdates: [] }));
+  const acceptHighConfidence = () => {
+    patchProject((p) => {
+      let np = { ...p };
+      const remain = [];
+      for (const pu of p.pendingUpdates || []) {
+        if (!pu.inferred && (pu.confidence || 0) >= 0.8) np = applyUpdateToProject(np, pu);
+        else remain.push(pu);
+      }
+      return { ...np, pendingUpdates: remain };
+    });
+  };
+
+  // ── File attachment handler ──
+  const handleFiles = async (files) => {
+    const atts = [];
+    for (const f of files) {
+      if (f.type.startsWith("image/") || f.type === "application/pdf") {
+        const b64 = await fileToBase64(f);
+        atts.push({ name: f.name, type: f.type, data: b64, mediaType: f.type });
+      }
+    }
+    setAttachments((p) => [...p, ...atts]);
+  };
+
+  const messageText = (message) => {
+    if (!message) return "";
+    if (typeof message.display === "string") return message.display;
+    if (typeof message.content === "string") return message.content;
+    const textPart = Array.isArray(message.content) ? message.content.find((part) => part.type === "text") : null;
+    return textPart?.text || "";
+  };
+
+  const updateUserMessageContent = (message, text) => {
+    if (Array.isArray(message.content)) {
+      const mediaParts = message.content.filter((part) => part.type !== "text");
+      return text ? [...mediaParts, { type: "text", text }] : mediaParts;
+    }
+    return text;
+  };
+
+  const transcriptLines = (list) => (list || [])
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => `${m.role === "user" ? "用户" : "AI"}：${messageText(m) || "（非文本内容）"}`)
+    .join("\n\n");
+
+  const compactMessagesForAPI = (list) => {
+    if (!activeProject?.autoSummarizeChats) return list;
+    if (!activeSessionObj?.summary?.trim()) return list;
+    if ((list || []).length <= SUMMARY_KEEP_MESSAGES) return list;
+    const compacted = list.slice(-SUMMARY_KEEP_MESSAGES);
+    const firstUserIndex = compacted.findIndex((m) => m.role === "user");
+    return firstUserIndex > 0 ? compacted.slice(firstUserIndex) : compacted;
+  };
+
+  const updateChatSummary = async (sid, completedMessages, { force = false } = {}) => {
+    if ((!force && !activeProject?.autoSummarizeChats) || !sid || !config.apiKey) return false;
+    if (!force && (completedMessages || []).length < SUMMARY_KEEP_MESSAGES + SUMMARY_TRIGGER_MESSAGES) return false;
+
+    const currentSession = sessions[sid] || activeSessionObj || {};
+    const priorSummary = currentSession.summary || "";
+    const rawUntil = Number(currentSession.summaryUntil || 0);
+    const summaryUntil = Math.min(Math.max(0, rawUntil), completedMessages.length);
+    const summarizeEnd = force ? completedMessages.length : Math.max(0, completedMessages.length - SUMMARY_KEEP_MESSAGES);
+    if (!force && summarizeEnd - summaryUntil < SUMMARY_TRIGGER_MESSAGES) return false;
+    const summarizeStart = force ? 0 : Math.max(summaryUntil, summarizeEnd - SUMMARY_BATCH_MESSAGES);
+    if (summarizeEnd <= summarizeStart) return false;
+
+    const chunk = completedMessages.slice(summarizeStart, summarizeEnd);
+    if (!force && chunk.length < 4) return false;
+
+    setStatus(force ? "总结对话中…" : "自动总结对话中…");
+    const prompt = `你是长期 RP 对话压缩器。请更新【本对话前情提要】，用于之后继续同一段聊天。
+
+要求：
+- 只总结明确发生过的内容，不要编造。
+- 保留剧情进展、角色意图、关系变化、未解决伏线、重要物品/地点/时间。
+- 保留用户扮演角色的明确行动与选择。
+- 不要写成小说正文，不要加入新剧情。
+- 控制在 350 字以内，优先保留最新变化。
+
+【已有提要】
+${priorSummary || "（无）"}
+
+【新增对话片段】
+${transcriptLines(chunk)}`;
+
+    try {
+      const nextSummary = (await callAPIOnce(config, prompt)).trim();
+      if (!nextSummary) return false;
+      setSessions((prev) => {
+        const s = prev[sid];
+        if (!s) return prev;
+        return {
+          ...prev,
+          [sid]: { ...s, summary: nextSummary, summaryUntil: summarizeEnd, updatedAt: Date.now() },
+        };
+      });
+      setStatus("对话提要已更新 ✓");
+      setTimeout(() => setStatus(""), 1800);
+      return true;
+    } catch {
+      setStatus("");
+      return false;
+    }
+  };
+
+  const generateAssistantReply = async (baseMessages, promptText, sid = activeSessionId) => {
+    if (!sid) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+
+    setLoading(true);
+    setStatus("思考中…");
+
+    const aid = uid();
+    setSessions((prev) => {
+      const s = prev[sid];
+      if (!s) return prev;
+      return {
+        ...prev,
+        [sid]: {
+          ...s,
+          updatedAt: Date.now(),
+          messages: [...baseMessages, { role: "assistant", content: "", id: aid, streaming: true }],
+        },
+      };
+    });
+
+    try {
+      const apiMsgs = compactMessagesForAPI(baseMessages).map((m) => ({ role: m.role, content: m.content }));
+      const sys = buildSystem(promptText);
+
+      const finalText = await callAPI(config, apiMsgs, sys, (chunk) => {
+        setSessions((prev) => {
+          const s = prev[sid];
+          if (!s) return prev;
+          return {
+            ...prev,
+            [sid]: {
+              ...s,
+              updatedAt: Date.now(),
+              messages: s.messages.map((m) => m.id === aid ? { ...m, content: chunk } : m),
+            },
+          };
+        });
+      });
+
+      const allowDailyGrowth = HP_KIOSK && activeMode === "world" && player?.stats && !parseActionCommand(promptText);
+      const daily = allowDailyGrowth ? parseDailyGrowth(finalText) : { cleaned: finalText, entries: [] };
+      const visibleText = daily.cleaned || finalText;
+      const dailyGrowthLine = formatDailyGrowth(daily.entries);
+
+      if (daily.entries.length) {
+        patchProject((p) => {
+          const pc = p.playerCharacter || {};
+          return { ...p, playerCharacter: { ...pc, stats: applyDailyGrowth(pc.stats, daily.entries) } };
+        });
+      }
+
+      setSessions((prev) => {
+        const s = prev[sid];
+        if (!s) return prev;
+        return {
+          ...prev,
+          [sid]: { ...s, messages: s.messages.map((m) => m.id === aid ? { ...m, content: visibleText, roll: dailyGrowthLine || null, streaming: false } : m) },
+        };
+      });
+      const completedMessages = [...baseMessages, { role: "assistant", content: visibleText, id: aid, roll: dailyGrowthLine || null, streaming: false }];
+
+      // HP 专项：原著时间线自动推进（混合节奏，仅世界模式 + HP 预设）。基于 prev 状态结算，防陈旧。
+      if (activePreset && activeMode === "world" && canonTimeline.length) {
+        patchProject((p) => {
+          const adv = advanceTime(p.currentTimeLabel, canonTimeline, p.beatProgress);
+          return adv.advanced
+            ? { ...p, currentTimeLabel: adv.label, beatProgress: 0 }
+            : { ...p, beatProgress: adv.beatProgress };
+        });
+      }
+
+      const summaryUpdated = await updateChatSummary(sid, completedMessages);
+      const sessionForAuto = sessions[sid] || activeSessionObj || {};
+      const autoExtractUntil = Number(sessionForAuto.autoExtractUntil || 0);
+      const shouldAutoExtract = activeProject?.autoExtractUpdates && visibleText?.trim() && completedMessages.length - autoExtractUntil >= AUTO_EXTRACT_INTERVAL_MESSAGES;
+      if (shouldAutoExtract) {
+        const recentMessages = completedMessages.slice(-AUTO_EXTRACT_WINDOW_MESSAGES);
+        extractUpdateSuggestions({ dialogueText: transcriptLines(recentMessages), auto: true, blocking: false }).then((extracted) => {
+          if (!extracted) return;
+          setSessions((prev) => {
+            const s = prev[sid];
+            return s ? { ...prev, [sid]: { ...s, autoExtractUntil: completedMessages.length, updatedAt: Date.now() } } : prev;
+          });
+        });
+      }
+      if (!shouldAutoExtract && !summaryUpdated) setStatus("");
+    } catch (err) {
+      setSessions((prev) => {
+        const s = prev[sid];
+        if (!s) return prev;
+        return {
+          ...prev,
+          [sid]: { ...s, messages: s.messages.map((m) => m.id === aid ? { ...m, content: `⚠️ ${err.message}`, streaming: false } : m) },
+        };
+      });
+      setStatus("发送失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Send ──
+  const send = async () => {
+    if (loading) return;
+    const text = input.trim();
+    if (!text && !attachments.length) return;
+    if (!activeSessionId) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+
+    const curAtts = [...attachments];
+
+    // HP 专项：行动指令（/练咒 …）→ 透明检定。普通对话不触发。
+    let actionAnchor = null, rollLine = null;
+    const cmd = HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
+    if (cmd && player?.stats) {
+      const stamina = Number(player.stats.stamina ?? STAMINA_MAX);
+      const cost = cmd.action.cost || 10;
+
+      if (cmd.action.rest) {
+        // 休息：体力全恢复（时间会随回合自然推进）
+        rollLine = `😴 休息 → 体力 ${stamina} → ${STAMINA_MAX}`;
+        actionAnchor = "【行动】玩家休息 / 睡眠，体力完全恢复。请叙述一段休息或入睡的过渡，并自然推进到下一时段。";
+        patchProject((p) => {
+          const pc = p.playerCharacter || {};
+          return { ...p, playerCharacter: { ...pc, stats: { ...(pc.stats || {}), stamina: STAMINA_MAX } } };
+        });
+      } else if (cmd.action.confess) {
+        // 告白：好感度 ≥60 才成（恋人门槛）
+        const tgt = findCharacter(cmd.target, activeProject?.characters, activeProject?.ocs);
+        if (tgt) {
+          const fav = player.favor?.[tgt.id] || 0;
+          const ok = fav >= 60;
+          rollLine = `💗 向 ${tgt.name} 告白 —— 好感度 ${fav}（${favorStage(fav)}）→ ${ok ? "接受 ❤" : "被婉拒"}`;
+          actionAnchor = `【告白结果（旁白必须据此叙事，不得改判）】玩家向 ${tgt.name} 告白，当前好感度 ${fav}。` +
+            (ok ? "已达恋人阈值（≥60），对方接受，二人正式成为恋人。" : "未达恋人阈值（<60），对方婉拒或回避，但不必撕破脸。") +
+            "请自然演绎这一刻。";
+        } else {
+          rollLine = `💗 告白 —— 未指定对象`;
+          actionAnchor = "【告白】玩家发起告白但未指明对象，请让其先明确心意所向。";
+        }
+      } else if (cmd.action.exam) {
+        // 期末考试：各科课程值 → 等级 O/E/A/P/D/T
+        const cs = normalizeCourses(player.courses);
+        const subs = player.meta?.subjects || [];
+        const results = COURSES.map((s) => ({ s, g: examGrade(cs[s], subs.includes(s)) }));
+        const hp = results.reduce((a, r) => a + ({ O: 10, E: 6, A: 3, P: 0, D: -2, T: -5 }[r.g] || 0), 0);
+        rollLine = `📜 期末成绩：` + results.map((r) => `${r.s.replace(" / 魁地奇", "")} ${r.g}`).join(" · ") + `  ·  学院分 ${hp >= 0 ? "+" : ""}${hp}`;
+        actionAnchor = `【期末考试结果（旁白必须据此宣布，不得改判等级）】\n` +
+          results.map((r) => `${r.s}：${r.g}`).join("\n") +
+          `\n（等级：O 优秀 / E 超出预期 / A 及格 / P 较差 / D 糟糕 / T 巨魔）\n学院分变化 ${hp >= 0 ? "+" : ""}${hp}。请描写考试与发榜场景，符合各科水平。`;
+        patchProject((p) => {
+          const pc = p.playerCharacter || {};
+          const stats = { ...(pc.stats || {}) };
+          stats.housePoints = Math.max(0, (stats.housePoints || 0) + hp);
+          return { ...p, playerCharacter: { ...pc, stats } };
+        });
+      } else if (cmd.action.ending) {
+        // 结局：AI 依终值多元生成，不写死
+        rollLine = `🌅 命运的纺线开始编织……`;
+        actionAnchor = "【结局生成（开放 · 多元，禁止套用固定模板）】请依据玩家七年的全部数据——养成数值、各科课程、好感度与关系、学院分、原创角色——" +
+          "为 TA 生成一段专属的「十九年后」尾声：职业去向、与重要角色（含 OC）的情感归宿、生活图景。要个性化、贴合其数值与选择，可圆满可有遗憾，不必皆大欢喜。";
+      } else if (stamina < cost) {
+        // 体力不足：行动受阻，不掷骰、不结算
+        rollLine = `⚠️ 体力不足 ${stamina}/${cost} —— 先 /休息 恢复`;
+        actionAnchor = `【行动受阻】玩家体力不足（当前 ${stamina}，需 ${cost}），无法完成「${cmd.action.label}」。请叙述其疲惫、力不从心、需要休息；本次不成功，不产生任何数值或好感度变化。`;
+      } else {
+        const check = runAction(cmd.action, player);
+        rollLine = formatRoll(cmd.action, check) + `  ·  体力 -${cost}`;
+        const deduct = (stats) => { stats.stamina = Math.max(0, (stats.stamina ?? STAMINA_MAX) - cost); };
+
+        if (cmd.action.social) {
+          const tgt = findCharacter(cmd.target, activeProject?.characters, activeProject?.ocs);
+          if (tgt) {
+            const dF = favorDelta(check.tier);
+            const newFavor = Math.max(0, Math.min(100, (player.favor?.[tgt.id] || 0) + dF));
+            rollLine += `  ·  ${tgt.name} 好感度 ${dF >= 0 ? "+" : ""}${dF} → ${newFavor}（${favorStage(newFavor)}）`;
+            actionAnchor = checkAnchor(cmd.action, check, tgt.name) + "\n" + socialAnchor(tgt.name, newFavor);
+            patchProject((p) => {
+              const pc = p.playerCharacter || {};
+              const stats = { ...(pc.stats || {}) }; deduct(stats);
+              const favor = { ...(pc.favor || {}) }; favor[tgt.id] = newFavor;
+              return { ...p, playerCharacter: { ...pc, stats, favor } };
+            });
+          } else {
+            actionAnchor = checkAnchor(cmd.action, check, cmd.target || "（未指定对象）");
+            patchProject((p) => { const pc = p.playerCharacter || {}; const stats = { ...(pc.stats || {}) }; deduct(stats); return { ...p, playerCharacter: { ...pc, stats } }; });
+          }
+        } else {
+          actionAnchor = checkAnchor(cmd.action, check, cmd.target);
+          const eff = checkEffects(cmd.action, check);
+          patchProject((p) => {
+            const pc = p.playerCharacter || {};
+            const stats = { ...(pc.stats || {}) };
+            deduct(stats);
+            if (eff.delta) stats[eff.stat] = Math.max(0, Math.min(100, (stats[eff.stat] || 0) + eff.delta));
+            if (eff.housePoints) stats.housePoints = Math.max(0, (stats.housePoints || 0) + eff.housePoints);
+            // 对应科目的课程值也提升
+            let courses = pc.courses;
+            if (cmd.action.subject && eff.delta > 0) {
+              courses = { ...(pc.courses || {}) };
+              courses[cmd.action.subject] = Math.max(0, Math.min(100, (courses[cmd.action.subject] || 8) + eff.delta));
+            }
+            return { ...p, playerCharacter: { ...pc, stats, courses } };
+          });
+        }
+      }
+    }
+
+    let content;
+    if (curAtts.length > 0 && config.apiType === "anthropic") {
+      const parts = [];
+      for (const a of curAtts) {
+        if (a.type === "application/pdf")
+          parts.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } });
+        else if (a.type.startsWith("image/"))
+          parts.push({ type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } });
+      }
+      if (text) parts.push({ type: "text", text });
+      content = parts;
+    } else {
+      content = actionAnchor ? `${text}\n\n${actionAnchor}` : text;
+    }
+
+    const userMsg = {
+      id: uid(),
+      role: "user", content,
+      display: text,
+      roll: rollLine || null, // 检定/状态变化，渲染为独立居中状态条（不进气泡、不发给 AI）
+      attachments: curAtts.map((a) => ({ name: a.name })),
+    };
+    const newMsgs = [...messages, userMsg];
+    setMessages(newMsgs);
+    setInput("");
+    setAttachments([]);
+    if (taRef.current) taRef.current.style.height = "auto";
+    maybeAutoNameChat(activeSessionId, text);
+
+    await generateAssistantReply(newMsgs, text, activeSessionId);
+  };
+
+  const copyMessage = async (message) => {
+    const text = messageText(message);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("已复制 ✓");
+    } catch {
+      setStatus("复制失败");
+    }
+    setTimeout(() => setStatus(""), 1800);
+  };
+
+  const clearSummaryIfAffected = (messageIndex) => {
+    const until = Number(activeSessionObj?.summaryUntil || 0);
+    if (!activeSessionId || !until || messageIndex >= until) return;
+    patchSession((s) => ({ ...s, summary: "", summaryUntil: 0 }));
+  };
+
+  const deleteMessage = (messageId) => {
+    const index = messages.findIndex((message, i) => (message.id || `idx-${i}`) === messageId);
+    if (index >= 0) clearSummaryIfAffected(index);
+    setMessages((prev) => prev.filter((message, index) => (message.id || `idx-${index}`) !== messageId));
+    if (editingMsgId === messageId) {
+      setEditingMsgId(null);
+      setEditDraft("");
+    }
+  };
+
+  const regenerateFrom = async (messageId) => {
+    if (loading || !activeSessionId) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+    const index = messages.findIndex((message, i) => (message.id || `idx-${i}`) === messageId);
+    if (index < 0) return;
+
+    const target = messages[index];
+    const userIndex = target.role === "user"
+      ? index
+      : messages.slice(0, index).map((message, i) => ({ message, i })).reverse().find(({ message }) => message.role === "user")?.i;
+
+    if (userIndex === undefined || userIndex < 0) {
+      setStatus("没有可重新生成的用户消息");
+      setTimeout(() => setStatus(""), 2200);
+      return;
+    }
+
+    if (index < messages.length - 1 && !window.confirm("重新生成会删除这条消息之后的后续对话，继续吗？")) return;
+
+    clearSummaryIfAffected(userIndex);
+    const baseMessages = messages.slice(0, userIndex + 1).map((message) => ({ ...message, streaming: false }));
+    setMessages(baseMessages);
+    await generateAssistantReply(baseMessages, messageText(baseMessages[userIndex]), activeSessionId);
+  };
+
+  const startEditMessage = (message, messageId) => {
+    if (message.role !== "user" || message.streaming) return;
+    setEditingMsgId(messageId);
+    setEditDraft(messageText(message));
+  };
+
+  const saveEditedMessage = async (messageId) => {
+    if (loading || !activeSessionId) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+    const index = messages.findIndex((message, i) => (message.id || `idx-${i}`) === messageId);
+    if (index < 0) return;
+
+    const text = editDraft.trim();
+    if (!text && !messages[index].attachments?.length) return;
+    clearSummaryIfAffected(index);
+
+    const edited = {
+      ...messages[index],
+      id: messages[index].id || messageId,
+      display: text,
+      content: updateUserMessageContent(messages[index], text),
+      editedAt: Date.now(),
+      streaming: false,
+    };
+    const baseMessages = [...messages.slice(0, index), edited];
+    setEditingMsgId(null);
+    setEditDraft("");
+    setMessages(baseMessages);
+    await generateAssistantReply(baseMessages, text, activeSessionId);
+  };
+
+  // ── Sidebar tabs ──
+  const scopeLabel = activeMode === "world" ? "世界聊天" : activeChar.name;
+  const allTabs = [
+    { key: "project",  icon: <I.Folder />,   label: "项目" },
+    { key: "settings", icon: <I.Settings />, label: "配置" },
+    { key: "sessions", icon: <I.Chat />,     label: `对话${currentChatList.length > 0 ? ` · ${currentChatList.length}` : ""}` },
+    { key: "chars",    icon: <I.User />,      label: `角色${projectChars.length > 0 ? ` · ${projectChars.length}` : ""}` },
+    { key: "state",    icon: <span style={{ fontSize: 13 }}>📍</span>, label: "剧情状态" },
+    { key: "files",    icon: <I.Folder />,    label: `文件${projectFiles.length > 0 ? ` · ${projectFiles.filter((f) => f.enabled).length}/${projectFiles.length}` : ""}` },
+    { key: "world",    icon: <I.Book />,      label: `世界书${worldBook.filter((e) => e.enabled).length > 0 ? ` · ${worldBook.filter((e) => e.enabled).length}` : ""}` },
+    { key: "memory",   icon: <I.Brain />,     label: `记忆${worldMemory.length + storyMemory.length > 0 ? ` · ${worldMemory.length + storyMemory.length}` : ""}` },
+    { key: "pending",  icon: <I.Inbox />,     label: `建议${pendingUpdates.length > 0 ? ` · ${pendingUpdates.length}` : ""}` },
+  ];
+  // 成品模式：只保留「配置」（API Key）。其余世界数据面板全部隐藏（内置存储，不可视化）。
+  const tabs = HP_KIOSK ? allTabs.filter((t) => t.key === "settings") : allTabs;
+  const headerTabs = HP_KIOSK ? [] : tabs.filter((t) => ["sessions", "chars", "state"].includes(t.key));
+
+  const triggered = matchWorld(worldBook, input);
+
+  // ── Loading / migration screen ──
+  if (!ready) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", color: T.textDim, background: T.bg }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
+          <div>加载中…</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── HP 专项：角色创建向导（优先于首页/工作区）──
+  if (creatingPresetId) {
+    return (
+      <CharacterCreator
+        generation={GENERATIONS.find((g) => g.presetId === creatingPresetId)}
+        onComplete={finishCreation}
+        onCancel={() => setCreatingPresetId(null)}
+      />
+    );
+  }
+
+  // ── HP 专项：三世代首页（在任何工作区之前）──
+  if (hpHome) {
+    return <GenerationSelect generations={GENERATIONS} onPick={enterGeneration} />;
+  }
+
+  if (!activeProject) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", color: T.textDim, background: T.bg }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
+          <div>加载中…</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── HP 专项：不暴露通用「项目列表」。任何「返回」都回到三世代首页。 ──
+  if (view === "projects") {
+    return <GenerationSelect generations={GENERATIONS} onPick={enterGeneration} />;
+  }
+
+  // ── Render: workspace ──
+  const sidebarStyle = isMobile
+    ? {
+        position: "fixed", top: 10, left: 10, bottom: 10, zIndex: 50,
+        width: "86vw", maxWidth: 330, height: "auto",
+        transform: panel ? "translateX(0)" : "translateX(-100%)",
+        transition: "transform 0.25s ease",
+        border: `1px solid ${V.line}`, borderRadius: 18, background: V.frame,
+        boxShadow: panel ? "0 24px 70px rgba(0,0,0,0.58), inset 0 0 0 1px rgba(255,250,226,0.05)" : "none",
+        display: "flex", flexDirection: "column",
+      }
+    : {
+        width: panel ? 330 : 0, minWidth: panel ? 330 : 0,
+        overflow: "hidden", border: panel ? `1px solid ${V.line}` : "none", borderRadius: panel ? 20 : 0, background: V.frame,
+        transition: "width 0.22s ease, min-width 0.22s ease",
+        display: "flex", flexDirection: "column",
+        boxShadow: panel ? "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" : "none",
+      };
+
+  return (
+    <div style={{ display: "flex", gap: isMobile ? 0 : 14, height: "100dvh", width: "100%", overflow: "hidden", background: HP_KIOSK ? NIGHT_BG : V.bg, color: V.ink, position: "relative", padding: isMobile ? 0 : 16 }}>
+
+      {/* HP 专项：星尘背景 */}
+      {HP_KIOSK && <Starfield count={70} />}
+
+      {/* Mobile drawer backdrop */}
+      {isMobile && panel && (
+        <div onClick={() => setPanel(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 40 }} />
+      )}
+
+      {/* ════ Sidebar ════ */}
+      <div style={sidebarStyle}>
+        {/* Back to project list（成品模式隐藏：玩家从聊天头部的返回按钮回到世代选择）*/}
+        {!HP_KIOSK && (
+        <div style={{ padding: "12px 14px 0", flexShrink: 0 }}>
+          <button
+            onClick={() => { setHpHome(true); setPanel(null); }}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", border: `1px solid ${V.lineSoft}`, borderRadius: 999, background: V.softControl, color: V.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", width: "100%", boxShadow: "inset 0 0 18px rgba(255,250,226,0.04)" }}
+          >
+            <I.Back /><Avatar value={activeProject.icon} fallback="📁" size={20} radius={7} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: V.ink }}>{activeProject.name}</span>
+          </button>
+        </div>
+        )}
+        {/* Tab bar */}
+        <div style={{ padding: "10px 14px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 5, background: V.softControl, border: `1px solid ${V.lineSoft}`, borderRadius: 16, padding: 4, flexWrap: "wrap" }}>
+            {tabs.map((t) => (
+              <button key={t.key} onClick={() => setPanel(t.key)} style={{
+                display: "flex", alignItems: "center", gap: 4,
+                padding: "5px 10px", borderRadius: 999, border: "1px solid", borderColor: panel === t.key ? V.line : "transparent", cursor: "pointer",
+                fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+                background: panel === t.key ? V.accentSoft : "transparent",
+                color: panel === t.key ? V.ink : V.muted,
+                transition: "all 0.15s", whiteSpace: "nowrap",
+              }}>
+                {t.icon}{t.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setPanel(null)} style={{ width: 30, height: 30, display: "grid", placeItems: "center", background: V.softControl, border: `1px solid ${V.lineSoft}`, borderRadius: 12, cursor: "pointer", color: V.faint, padding: 0, marginLeft: 8 }}>
+            <I.Close />
+          </button>
+        </div>
+
+        {/* Sidebar body */}
+        <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+          {panel === "project" && (
+            <ProjectSettingsPanel
+              project={activeProject}
+              onSave={saveProjectSettings}
+              onDelete={() => deleteProject(activeProjectId)}
+              canDelete={projectArr.length > 1}
+            />
+          )}
+          {panel === "settings" && (
+            <SettingsPanel config={config} onSave={(c) => {
+              setConfig(c);
+              setStatus("配置已保存 ✓");
+              setTimeout(() => setStatus(""), 2000);
+              setPanel(null);
+            }} />
+          )}
+          {panel === "sessions" && (
+            <SessionPanel
+              mode={activeMode}
+              scopeLabel={scopeLabel}
+              sessions={currentChatList}
+              activeId={activeSessionId}
+              onSelect={selectChat}
+              onNew={newChat}
+              onRename={renameChat}
+              onDelete={deleteChat}
+              onSwitchWorld={switchToWorld}
+              onSaveSummary={saveChatSummary}
+              onClearSummary={clearChatSummary}
+              onSummarizeNow={summarizeChatNow}
+              summaryBusy={loading}
+            />
+          )}
+          {panel === "chars" && (
+            <CharacterPanel
+              characters={projectChars} activeId={activeCharId} activeMode={activeMode}
+              player={player} onEditPlayer={handlePlayerEdit}
+              onSelect={handleCharSelect} onEdit={handleCharEdit} onDelete={handleCharDelete}
+              onImportChars={handleImportChars}
+            />
+          )}
+          {panel === "state" && (
+            <CurrentStatePanel currentState={activeProject.currentState} onSave={saveCurrentState} />
+          )}
+          {panel === "files" && (
+            <ProjectFilesPanel files={projectFiles} setFiles={setProjectFiles} />
+          )}
+          {panel === "world" && (
+            <WorldBookPanel entries={worldBook} setEntries={setWorldBook} config={config} />
+          )}
+          {panel === "memory" && (
+            <MemoryPanel
+              worldMemory={worldMemory}
+              storyMemory={storyMemory}
+              onAdd={(layer, text) => {
+                if (layer === "world") setWorldMemory((p) => [...p, createFact(text)]);
+                else setStoryMemory((p) => [...p, createStoryEvent({ content: text })]);
+              }}
+              onDelete={(layer, i) => {
+                const setter = layer === "world" ? setWorldMemory : setStoryMemory;
+                setter((p) => p.filter((_, j) => j !== i));
+              }}
+              onClear={(layer) => (layer === "world" ? setWorldMemory([]) : setStoryMemory([]))}
+            />
+          )}
+          {panel === "pending" && (
+            <PendingUpdatesPanel
+              updates={pendingUpdates}
+              nameMap={idNameMap}
+              chatNameMap={chatNameMap}
+              onAccept={acceptUpdate}
+              onReject={rejectUpdate}
+              onRejectAll={rejectAllUpdates}
+              onAcceptHigh={acceptHighConfidence}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ════ HP 专项：玩家养成数值面板（桌面左侧栏）════ */}
+      {HP_KIOSK && !isMobile && activeMode === "world" && player?.stats && (
+        <StatusBar player={player} variant="rail" favorList={favorList} onRestart={restartGame}
+          ocs={activeProject?.ocs || []} onAddOc={() => setOcCreatorOpen(true)} onRemoveOc={removeOc} />
+      )}
+
+      {/* 移动端：数值底部抽屉 */}
+      {HP_KIOSK && isMobile && statsOpen && player?.stats && (
+        <div onClick={() => setStatsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "82vh", overflow: "auto", background: "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTop: "1px solid rgba(232,199,102,0.3)", boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}>
+            <StatusBar player={player} variant="sheet" onClose={() => setStatsOpen(false)} favorList={favorList} onRestart={restartGame}
+              ocs={activeProject?.ocs || []} onAddOc={() => { setStatsOpen(false); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
+          </div>
+        </div>
+      )}
+
+      {/* 原创角色创建（全屏覆盖）*/}
+      {HP_KIOSK && ocCreatorOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 80, overflow: "auto" }}>
+          <OcCreator
+            canonNames={(activePreset?.characters || []).map((c) => c.name)}
+            onSave={addOc}
+            onCancel={() => setOcCreatorOpen(false)}
+          />
+        </div>
+      )}
+
+      {/* ════ Chat area ════ */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative", zIndex: 1, border: isMobile || HP_KIOSK ? "none" : `1px solid ${V.line}`, borderRadius: isMobile ? 0 : 20, background: HP_KIOSK ? "transparent" : V.frame, boxShadow: isMobile || HP_KIOSK ? "none" : "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" }}>
+
+        {/* Header */}
+        <div style={{ height: isMobile ? 56 : 60, borderBottom: `1px solid ${V.lineSoft}`, background: HP_KIOSK ? "rgba(10,11,18,0.55)" : V.headerBar, backdropFilter: HP_KIOSK ? "blur(8px)" : undefined, display: "flex", alignItems: "center", padding: "0 14px", gap: 12, flexShrink: 0 }}>
+          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 7, overflow: "hidden" }}>
+            <button
+              onClick={() => { setHpHome(true); setPanel(null); }}
+              title="项目列表"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, border: `1px solid ${V.lineSoft}`, borderRadius: 13, background: V.softControl, color: V.gold, cursor: "pointer", flexShrink: 0 }}
+            >
+              <I.Back />
+            </button>
+            {isMobile ? (
+              HP_KIOSK ? null : (
+              <button
+                onClick={() => setPanel((p) => (p ? null : "sessions"))}
+                title="菜单"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, border: `1px solid ${V.lineSoft}`, borderRadius: 13, background: V.softControl, color: V.gold, cursor: "pointer", flexShrink: 0 }}
+              >
+                <I.Menu />
+              </button>
+              )
+            ) : (
+              headerTabs.map((t) => (
+                <button key={t.key} onClick={() => setPanel((p) => (p === t.key ? null : t.key))} style={{
+                  display: "flex", alignItems: "center", gap: 4, padding: "5px 10px",
+                  border: "1px solid", borderColor: panel === t.key ? V.line : V.lineSoft,
+                  borderRadius: 999,
+                  background: panel === t.key ? V.accentSoft : V.softControl,
+                  color: panel === t.key ? V.ink : V.muted,
+                  fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0,
+                }}>
+                  {t.icon}{t.label}
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Centre */}
+          {HP_KIOSK ? (
+            /* HP 专项：时间 + 学年阶段（挪到头部正中）*/
+            <div style={{ flex: "1 1 0", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", overflow: "hidden", padding: "0 8px" }}>
+              <span style={{ color: V.gold, fontSize: 12 }}>📅</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: V.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
+              {currentCanonBeat && phaseName(currentCanonBeat) && (
+                <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>· {phaseName(currentCanonBeat)}</span>
+              )}
+            </div>
+          ) : (
+            <div style={{ flex: "0 1 auto", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", minWidth: isMobile ? 0 : 220, maxWidth: isMobile ? "none" : 420, overflow: "hidden", padding: "0 8px" }}>
+              {!isMobile && (
+                <>
+                  <Avatar value={activeProject.icon} fallback="📁" size={22} radius={7} style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: V.ink, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>{activeProject.name}</span>
+                  <span style={{ color: V.faint, fontSize: 13 }}>·</span>
+                </>
+              )}
+              {activeMode === "world" ? (
+                <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                  <span style={{ color: V.gold, fontSize: 15 }}>✦</span><span style={{ fontFamily: V.serif, fontSize: isMobile ? 17 : 21, fontWeight: 800, fontStyle: "italic", color: V.gold }}>World</span>
+                </span>
+              ) : (
+                <>
+                  <Avatar value={activeChar.avatar} fallback="🧙" size={24} radius={8} style={{ flexShrink: 0 }} />
+                  <span style={{ fontFamily: V.serif, fontSize: isMobile ? 16 : 20, fontWeight: 800, fontStyle: "italic", color: V.gold, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: isMobile ? 110 : "none" }}>{activeChar.name}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, overflow: "hidden" }}>
+            {/* HP 专项：状态栏入口（移动端，桌面端已是常驻左栏）*/}
+            {HP_KIOSK && isMobile && activeMode === "world" && player?.stats && (
+              <button
+                onClick={() => setStatsOpen(true)}
+                title="养成数值"
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 11px", border: `1px solid ${V.lineSoft}`, borderRadius: 999, background: V.softControl, color: V.ink, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+              >
+                📖 状态
+              </button>
+            )}
+            {HP_KIOSK && (
+              <button
+                onClick={() => setPanel("settings")}
+                title="配置（API Key）"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+              >
+                <I.Settings />
+              </button>
+            )}
+
+            {!HP_KIOSK && (
+              <>
+                {!isMobile && (
+                  <span title={currentCanonBeat ? `${currentCanonBeat.part}｜原著：${currentCanonBeat.event}` : "当前时间"}
+                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", border: `1px solid ${V.lineSoft}`, borderRadius: 999, background: V.softControl, color: V.muted, fontSize: 11, fontWeight: 600, flexShrink: 0, maxWidth: 240 }}>
+                    📅 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
+                  </span>
+                )}
+                {status && !isMobile && <span style={{ fontSize: 11, color: V.muted, flexShrink: 0 }}>{status}</span>}
+                <button onClick={toggleTheme} title="切换主题"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", padding: isMobile ? 0 : "5px 10px", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: isMobile ? V.ink : V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                  {themeMode === "dark" ? "☀️" : "🌙"}
+                </button>
+                <button onClick={newChat} title="新建对话"
+                  style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? 0 : "5px 10px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", justifyContent: "center", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: isMobile ? V.ink : V.muted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                  <I.Plus />{!isMobile && "对话"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div style={{ flex: 1, overflow: "auto", background: HP_KIOSK ? "transparent" : V.chatBackdrop }}>
+          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: isMobile ? "20px 10px 24px" : "34px 26px 38px" }}>
+          {messages.length === 0 && HP_KIOSK && (
+            <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: "rgba(243,233,210,0.55)", fontSize: 14, lineHeight: 1.7 }}>
+              {config.apiKey ? "在下方描述你的行动，开启 1991 学年。" : "先在右上角 ⚙ 填写 API Key。"}
+            </div>
+          )}
+          {messages.length === 0 && !HP_KIOSK && (
+            <div style={{ textAlign: "center", margin: "16vh auto 0", color: V.muted, maxWidth: 360, padding: "24px 18px", border: `1px solid ${V.lineSoft}`, borderRadius: 24, background: V.emptyPanel }}>
+              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                {config.apiKey ? (activeMode === "world" ? "以旁白视角推进这个世界" : `与 ${activeChar.name} 单独对话`) : "先在「配置」中填写 API Key"}
+              </div>
+            </div>
+          )}
+          {messages.map((m, i) => {
+            const isUser = m.role === "user";
+            const msgId = m.id || `idx-${i}`;
+            const displayText = m.display || m.content;
+            const isEditing = editingMsgId === msgId;
+            const actionButton = (disabled = false) => ({
+              width: 28,
+              height: 28,
+              display: "grid",
+              placeItems: "center",
+              border: "1px solid rgba(92,73,42,0.18)",
+              borderRadius: "50%",
+              background: "rgba(255,250,226,0.16)",
+              color: disabled ? "rgba(97,75,47,0.3)" : "rgba(97,75,47,0.72)",
+              cursor: disabled ? "not-allowed" : "pointer",
+              fontSize: 11,
+              fontWeight: 800,
+              fontFamily: "inherit",
+              padding: 0,
+            });
+            const editButton = (disabled = false) => ({
+              border: `1px solid ${V.lineSoft}`,
+              borderRadius: 999,
+              background: V.softControl,
+              color: disabled ? V.faint : V.muted,
+              cursor: disabled ? "not-allowed" : "pointer",
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "inherit",
+              padding: "4px 9px",
+            });
+            return (
+              <Fragment key={msgId}>
+              <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", alignItems: "flex-start", gap: isMobile ? 8 : 12, marginBottom: m.roll ? 10 : (isMobile ? 22 : 28), animation: "fadeUp 0.18s ease" }}>
+                {!isUser && (
+                  <div style={{ width: isMobile ? 34 : 44, height: isMobile ? 34 : 44, borderRadius: 14, border: `1px solid ${V.line}`, background: V.softControl, color: V.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0, marginTop: 2, fontFamily: V.serif, fontWeight: 900, boxShadow: "inset 0 0 18px rgba(0,0,0,0.3)" }}>
+                    {activeMode === "world" ? "✦" : (
+                      <Avatar value={activeChar.avatar} fallback="🧙" size={isMobile ? 32 : 42} radius={14} />
+                    )}
+                  </div>
+                )}
+                <div style={{ maxWidth: isMobile ? "82%" : isUser ? "min(640px, 76%)" : "76%", display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    position: "relative",
+                    background: HP_KIOSK
+                      ? (isUser ? "linear-gradient(160deg, rgba(48,40,23,0.92), rgba(26,22,14,0.94))" : "rgba(17,19,27,0.85)")
+                      : (isUser ? V.userPaper : V.paper),
+                    color: HP_KIOSK ? "#ece2c8" : V.paperText,
+                    borderRadius: isUser ? "18px 18px 8px 18px" : "18px 18px 18px 8px",
+                    padding: "14px 15px", fontSize: 14, lineHeight: 1.75,
+                    border: HP_KIOSK ? "1px solid rgba(232,199,102,0.16)" : `1px solid ${V.line}`,
+                    borderLeft: HP_KIOSK
+                      ? (isUser ? "3px solid rgba(232,199,102,0.5)" : "3px solid rgba(163,30,34,0.75)")
+                      : `4px solid ${isUser ? V.goldDim : V.red}`,
+                    boxShadow: HP_KIOSK ? "0 10px 26px rgba(0,0,0,0.4)" : "0 12px 28px rgba(0,0,0,0.24)",
+                    whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}>
+                    {m.attachments?.map((a, j) => (
+                      <div key={j} style={{ display: "inline-block", background: "rgba(255,250,226,0.42)", borderRadius: 999, padding: "1px 7px", fontSize: 11, marginBottom: 5, marginRight: 3 }}>
+                        📎 {a.name}
+                      </div>
+                    ))}
+                    {isEditing ? (
+                      <textarea
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        rows={Math.min(8, Math.max(3, editDraft.split("\n").length))}
+                        style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(92,73,42,0.28)", borderRadius: 14, background: "rgba(255,250,226,0.38)", color: V.paperText, fontSize: 14, fontFamily: "inherit", lineHeight: 1.55, padding: "9px 11px", resize: "vertical", outline: "none" }}
+                      />
+                    ) : (
+                      <>
+                        {typeof displayText === "string" ? displayText : typeof m.content === "string" ? m.content : "[多模态消息]"}
+                        {m.streaming && <span style={{ opacity: 0.5, animation: "blink 1s infinite" }}>▋</span>}
+                      </>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
+                      <button onClick={() => saveEditedMessage(msgId)} disabled={loading} style={editButton(loading)}>保存并重生成</button>
+                      <button onClick={() => { setEditingMsgId(null); setEditDraft(""); }} style={editButton()}>取消</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 5, marginTop: 7, padding: "0 8px", flexWrap: "wrap", justifyContent: isUser ? "flex-end" : "flex-start", opacity: 0.56 }}>
+                      <button title="Regenerate" onClick={() => regenerateFrom(msgId)} disabled={loading || m.streaming} style={actionButton(loading || m.streaming)}>↻</button>
+                      <button title="Copy" onClick={() => copyMessage(m)} disabled={m.streaming} style={actionButton(m.streaming)}>⧉</button>
+                      <button title="Edit" onClick={() => startEditMessage(m, msgId)} disabled={loading || m.streaming || !isUser} style={actionButton(loading || m.streaming || !isUser)}>✎</button>
+                      <button title="Delete" onClick={() => deleteMessage(msgId)} disabled={m.streaming} style={actionButton(m.streaming)}>⌫</button>
+                    </div>
+                  )}
+                </div>
+                {isUser && (
+                  <div style={{ width: isMobile ? 34 : 44, height: isMobile ? 34 : 44, borderRadius: 14, border: `1px solid ${V.line}`, background: V.softControl, color: V.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0, marginTop: 2, fontFamily: V.serif, fontWeight: 900, boxShadow: "inset 0 0 18px rgba(0,0,0,0.3)" }}>
+                    <Avatar value={player.avatar} fallback="我" size={isMobile ? 32 : 42} radius={14} />
+                  </div>
+                )}
+              </div>
+              {/* HP 专项：检定/状态变化 —— 对话流中间的独立居中状态条 */}
+              {m.roll && (
+                <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
+                  <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: "rgba(232,199,102,0.08)", border: "1px solid rgba(232,199,102,0.28)", color: "#d8c79a", fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
+                    {m.roll}
+                  </div>
+                </div>
+              )}
+              </Fragment>
+            );
+          })}
+          <div ref={endRef} />
+          </div>
+        </div>
+
+        {/* World book hint */}
+        {triggered.length > 0 && input && (
+          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: "0 14px 6px" }}>
+            <div style={{ padding: "5px 10px", background: T.greenBg, border: `1px solid ${T.greenBorder}`, borderRadius: 7, fontSize: 11, color: T.greenText }}>
+              🌍 世界书触发：{triggered.map((e) => e.title).join("、")}
+            </div>
+          </div>
+        )}
+
+        {/* Attachment chips */}
+        {attachments.length > 0 && (
+          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", display: "flex", gap: 6, padding: "0 14px 6px", flexWrap: "wrap" }}>
+            {attachments.map((a, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 9px", background: T.surface, borderRadius: 20, fontSize: 11, color: T.textDim }}>
+                📎 {a.name}
+                <button onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: T.textFaint, padding: 0, display: "flex" }}>
+                  <I.Close />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input bar */}
+        <div style={{ borderTop: `1px solid ${V.lineSoft}`, background: V.inputBar, padding: "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
+          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto" }}>
+          {HP_KIOSK && activeMode === "world" && (
+            <div style={{ marginBottom: 9, display: "grid", gap: 7 }}>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
+                {SCENE_LOCATIONS.map((loc) => (
+                  <button
+                    key={loc.id}
+                    type="button"
+                    onClick={() => appendLifeScene(loc)}
+                    disabled={loading}
+                    title={`去${loc.label}`}
+                    style={{
+                      flex: "0 0 auto",
+                      height: 30,
+                      padding: "0 11px",
+                      borderRadius: 999,
+                      border: `1px solid ${V.lineSoft}`,
+                      background: "rgba(255,250,226,0.06)",
+                      color: loading ? V.faint : V.ink,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: "inherit",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {loc.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
+                {SCENE_TONES.map((tone) => {
+                  const on = sceneToneId === tone.id;
+                  return (
+                    <button
+                      key={tone.id}
+                      type="button"
+                      onClick={() => setSceneToneId(tone.id)}
+                      disabled={loading}
+                      title={tone.instruction}
+                      style={{
+                        flex: "0 0 auto",
+                        height: 26,
+                        padding: "0 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${on ? V.line : V.lineSoft}`,
+                        background: on ? V.accentSoft : "rgba(255,250,226,0.035)",
+                        color: on ? V.gold : V.muted,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        fontFamily: "inherit",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {tone.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 9, border: `1px solid ${V.lineSoft}`, borderRadius: 18, padding: "8px 8px 8px 12px", background: V.inputField }}>
+            <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => handleFiles(Array.from(e.target.files))} />
+            <button onClick={() => fileRef.current?.click()} style={{ background: "none", border: "none", cursor: "pointer", color: V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
+              <I.Attach />
+            </button>
+            <textarea
+              ref={taRef} value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+              placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
+              rows={1}
+              style={{ flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.5, maxHeight: 140, overflowY: "auto", resize: "none", padding: "4px 0" }}
+            />
+            <button
+              onClick={send}
+              disabled={loading || (!input.trim() && !attachments.length)}
+              style={{
+                width: 38, height: 38, borderRadius: 16, border: `1px solid ${V.line}`,
+                background: loading || (!input.trim() && !attachments.length) ? V.softControl : V.seal,
+                color:      loading || (!input.trim() && !attachments.length) ? V.faint : "#f6e4ad",
+                cursor:     loading || (!input.trim() && !attachments.length) ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, transition: "background 0.15s", boxShadow: "inset 0 2px 10px rgba(255,255,255,0.12)",
+              }}
+            >
+              {loading
+                ? <div style={{ width: 13, height: 13, border: `2px solid ${V.faint}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                : <I.Send />
+              }
+            </button>
+          </div>
+          {!isMobile && (
+            <div style={{ fontSize: 11, color: V.faint, marginTop: 6, textAlign: "center" }}>
+              {activeMode === "world" ? "世界聊天 · 旁白推进，可扮演所有角色" : `角色聊天 · 与 ${activeChar.name} 一对一`} · 共享世界状态，不共享聊天记录
+            </div>
+          )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
