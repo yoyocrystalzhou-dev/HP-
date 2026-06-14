@@ -39,7 +39,7 @@ import { initialCourses, formatCoursesBlock, COURSES, normalizeCourses } from ".
 import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects, examGrade } from "./lib/checks.js";
 import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
 import { favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor } from "./lib/affinity.js";
-import { LIFE_SCENE_RULES, SCENE_LOCATIONS, SCENE_TONES, buildLifeSceneInput } from "./lib/lifeScenes.js";
+import { LIFE_SCENE_RULES, SCENE_LOCATIONS, SCENE_TONES, SCENE_PERIODS, buildLifeSceneInput, formatLifePeriodBlock } from "./lib/lifeScenes.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
@@ -175,6 +175,8 @@ export default function App() {
   const projectFiles = activeProject?.files || [];
   const worldMemory = activeProject?.worldMemory || [];
   const storyMemory = activeProject?.storyMemory || [];
+  const scenePeriodId = activeProject?.dayPeriod || "morning";
+  const scenePeriod = SCENE_PERIODS.find((p) => p.id === scenePeriodId) || SCENE_PERIODS[0];
 
   const worldChatList = worldChatsOf(sessions, activeProject);
   const charChatList  = characterChatsOf(sessions, scopeChar);
@@ -224,7 +226,7 @@ export default function App() {
 
   const appendLifeScene = (location) => {
     const tone = SCENE_TONES.find((t) => t.id === sceneToneId) || SCENE_TONES[0];
-    const text = buildLifeSceneInput(location, tone);
+    const text = buildLifeSceneInput(location, tone, scenePeriod);
     setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
     requestAnimationFrame(() => {
       if (!taRef.current) return;
@@ -232,6 +234,10 @@ export default function App() {
       taRef.current.style.height = "auto";
       taRef.current.style.height = Math.min(taRef.current.scrollHeight, 140) + "px";
     });
+  };
+
+  const setScenePeriod = (id) => {
+    patchProject((p) => ({ ...p, dayPeriod: id }));
   };
 
   // ── One-time migration: v0 (pre-Project) and v1 → v2 ──
@@ -586,6 +592,7 @@ export default function App() {
     });
     const csFmt = formatCurrentState(csVisible, { nameMap });
     if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
+    if (HP_KIOSK && activeMode === "world") parts.push(formatLifePeriodBlock(scenePeriod));
     // HP 专项：注入当前时间对应的原著剧情锚点（防跑偏）。位于硬规则之下、当前状态之上。
     if (currentCanonBeat) parts.push(canonAnchor(currentCanonBeat));
     if (csFmt.stateLines.length) parts.push(`【当前剧情状态】\n${csFmt.stateLines.join("\n")}`);
@@ -1017,7 +1024,7 @@ ${transcriptLines(chunk)}`;
         actionAnchor = "【行动】玩家休息 / 睡眠，体力完全恢复。请叙述一段休息或入睡的过渡，并自然推进到下一时段。";
         patchProject((p) => {
           const pc = p.playerCharacter || {};
-          return { ...p, playerCharacter: { ...pc, stats: { ...(pc.stats || {}), stamina: STAMINA_MAX } } };
+          return { ...p, dayPeriod: "morning", playerCharacter: { ...pc, stats: { ...(pc.stats || {}), stamina: STAMINA_MAX } } };
         });
       } else if (cmd.action.confess) {
         // 告白：好感度 ≥60 才成（恋人门槛）
@@ -1732,6 +1739,36 @@ ${transcriptLines(chunk)}`;
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto" }}>
           {HP_KIOSK && activeMode === "world" && (
             <div style={{ marginBottom: 9, display: "grid", gap: 7 }}>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
+                {SCENE_PERIODS.map((period) => {
+                  const on = scenePeriodId === period.id;
+                  return (
+                    <button
+                      key={period.id}
+                      type="button"
+                      onClick={() => setScenePeriod(period.id)}
+                      disabled={loading}
+                      title={period.instruction}
+                      style={{
+                        flex: "0 0 auto",
+                        height: 26,
+                        padding: "0 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${on ? V.line : V.lineSoft}`,
+                        background: on ? "rgba(232,199,102,0.12)" : "rgba(255,250,226,0.035)",
+                        color: on ? V.gold : V.muted,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        fontFamily: "inherit",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {period.label}
+                    </button>
+                  );
+                })}
+              </div>
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
                 {SCENE_LOCATIONS.map((loc) => (
                   <button

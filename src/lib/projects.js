@@ -243,6 +243,7 @@ export function createProject(partial = {}) {
     description: partial.description || "",
     instructions: partial.instructions || "",
     currentTimeLabel: partial.currentTimeLabel || "",
+    dayPeriod: partial.dayPeriod || "morning",
     autoExtractUpdates: !!partial.autoExtractUpdates,
     autoSummarizeChats: !!partial.autoSummarizeChats,
     autoNameChats: !!partial.autoNameChats,

@@ -35,12 +35,28 @@ export const SCENE_TONES = [
   { id: "pauseCanon", label: "缓主线", instruction: "暂不推进原著大事件，保留生活片段" },
 ];
 
-export function buildLifeSceneInput(location, tone) {
+export const SCENE_PERIODS = [
+  { id: "morning", label: "上午", instruction: "课程、早餐后的走廊、教授与同学更容易出现" },
+  { id: "afternoon", label: "下午", instruction: "课程后、图书馆、庭院、球场和社团活动更自然" },
+  { id: "dinner", label: "晚饭后", instruction: "礼堂、公共休息室、走廊闲聊和小支线更自然" },
+  { id: "night", label: "夜晚", instruction: "公共休息室、宿舍、低声谈话和轻微违规更自然" },
+  { id: "late", label: "深夜", instruction: "宵禁风险高，夜游、被发现、秘密线索更自然" },
+];
+
+export function formatLifePeriodBlock(period) {
+  if (!period) return "";
+  return `【当前生活时间段】${period.label}：${period.instruction}。这只是生活氛围与事件池参考，不代表固定剧情。`;
+}
+
+export function buildLifeSceneInput(location, tone, period) {
   const loc = location?.label || location || "";
   const t = tone || SCENE_TONES[0];
+  const p = period || null;
+  const periodLine = p ? `当前时间段：${p.label}（${p.instruction}）。` : "";
   const toneLine = t.id === "open" ? "" : `本次倾向：${t.label}（${t.instruction}）。`;
   return [
     `我想去${loc}。`,
+    periodLine,
     toneLine,
     "请根据当前时间、地点、人物关系和已有记忆自由生成发生的事，不要把地点当成固定收益。"
   ].filter(Boolean).join("\n");
