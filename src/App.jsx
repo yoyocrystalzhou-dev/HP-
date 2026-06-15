@@ -2056,7 +2056,7 @@ ${transcriptLines(chunk)}`;
               style={{ flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
             />
             <button
-              onClick={send}
+              onClick={() => send()}
               disabled={loading || (!input.trim() && !attachments.length)}
               style={{
                 width: isMobile ? 34 : 38, height: isMobile ? 34 : 38, borderRadius: isMobile ? 14 : 16, border: `1px solid ${V.line}`,
