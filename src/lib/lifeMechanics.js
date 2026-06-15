@@ -2,6 +2,7 @@ import { ACTIONS, parseActionCommand } from "./checks.js";
 import { COURSES, normalizeCourses } from "./courses.js";
 import { labelSortKey } from "./timeline.js";
 import { HOGWARTS_LOCATIONS } from "./hogwartsLifeEngine.js";
+import { hasItem } from "./inventory.js";
 
 const has = (text, words) => words.some((word) => text.includes(word));
 
@@ -201,6 +202,22 @@ export function adjustedActionCost(action, periodId = "morning") {
   if (periodId === "late") extra += 8;
   if (action?.risky) extra += periodId === "late" ? 6 : periodId === "night" ? 3 : 0;
   return base + extra;
+}
+
+export function inventoryIssueForCommand(cmd, inventory) {
+  if (!cmd?.command) return "";
+  const command = cmd.command;
+  const placeIds = new Set((cmd.places || []).map((p) => p.id));
+  if (["练咒", "变形", "防御"].includes(command) && !hasItem(inventory, "wand")) {
+    return "玩家背包里还没有确认获得魔杖，不能直接进行需要挥杖的练习或防御术。";
+  }
+  if (command === "魔药") {
+    const classroomSupplied = placeIds.has("potions_dungeon");
+    if (!classroomSupplied && (!hasItem(inventory, "cauldron") || !hasItem(inventory, "potion_kit"))) {
+      return "玩家还没有确认拥有坩埚和魔药材料；除非在正式魔药教室使用课堂器材，否则不能直接熬制魔药。";
+    }
+  }
+  return "";
 }
 
 export function shouldAdvancePeriod({ messageKind, command }) {

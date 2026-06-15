@@ -4,6 +4,7 @@
 import {
   SCHEMA_VERSION,
   createProject,
+  createPlayerCharacter,
   createPendingUpdate,
   migrateAll,
   buildSuggestionPrompt,
@@ -13,6 +14,9 @@ import {
   formatHistory,
   PLAYER_ID,
 } from "../src/lib/projects.js";
+import { applyInventoryChanges, inferShoppingChanges, hasItem, missingRequiredItems } from "../src/lib/inventory.js";
+import { ACTIONS } from "../src/lib/checks.js";
+import { inventoryIssueForCommand } from "../src/lib/lifeMechanics.js";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("  ✗ " + msg); } };
@@ -116,6 +120,29 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
   ok(withLabel.includes('"date"'), "prompt schema includes date field");
   const noLabel = buildSuggestionPrompt({ mode: "world", userText: "u", aiText: "a", characters: [], player: { name: "我" }, currentTimeLabel: "" });
   ok(!noLabel.includes("当前时间："), "prompt omits current-time line when no label");
+}
+
+// 12. HP inventory defaults + shopping acquisition
+{
+  const player = createPlayerCharacter({ name: "我" });
+  ok(hasItem(player.inventory, "admission_letter"), "player starts with admission letter");
+  ok(hasItem(player.inventory, "shopping_list"), "player starts with shopping list");
+  ok(missingRequiredItems(player.inventory).includes("魔杖"), "wand is not assumed before purchase");
+
+  const wandChanges = inferShoppingChanges("我想去奥利凡德魔杖店，让魔杖选择我。", {
+    currentTimeLabel: "1991年8月16日 · 对角巷采购",
+    wandMeta: { wood: "山楂木", core: "独角兽毛" },
+  });
+  ok(wandChanges.some((x) => x.id === "wand"), "Ollivanders shopping records wand");
+  const withWand = applyInventoryChanges(player.inventory, wandChanges);
+  ok(hasItem(withWand, "wand"), "applied shopping changes add wand");
+
+  const cloak = inferShoppingChanges("我披上斗篷悄悄看看走廊。", { currentTimeLabel: "1991年9月2日" });
+  ok(cloak.length === 0, "mentioning a cloak after term does not grant an item");
+
+  const blocked = inventoryIssueForCommand({ command: "练咒", action: ACTIONS.练咒 }, player.inventory);
+  ok(blocked.includes("魔杖"), "spell practice is blocked without wand");
+  ok(!inventoryIssueForCommand({ command: "练咒", action: ACTIONS.练咒 }, withWand), "spell practice allowed after wand acquisition");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);

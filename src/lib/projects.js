@@ -45,8 +45,9 @@
 
 import { uid } from "./utils.js";
 import { store } from "./storage.js";
+import { createInitialInventory, normalizeInventory } from "./inventory.js";
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /** The player character's fixed id (the user's own avatar in the world). */
 export const PLAYER_ID = "player";
@@ -176,6 +177,7 @@ export function createPlayerCharacter(partial = {}) {
     meta: partial.meta || null,
     favor: partial.favor || {}, // 玩家对各角色的好感度 { [charId]: 0-100 }
     courses: partial.courses || {}, // 各科课程水平 { [科目]: 0-100 }
+    inventory: partial.inventory ? normalizeInventory(partial.inventory) : createInitialInventory(),
   };
 }
 

@@ -46,7 +46,8 @@ import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
 import { dayPeriod, nextDayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
-import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor } from "./lib/lifeMechanics.js";
+import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
+import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -126,6 +127,7 @@ export default function App() {
   const [status,      setStatus]      = useState("");
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editDraft,   setEditDraft]   = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const endRef  = useRef(null);
   const fileRef = useRef(null);
@@ -141,7 +143,7 @@ export default function App() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  const inputMaxHeight = isMobile ? 220 : 320;
+  const inputMaxHeight = isMobile ? 118 : 220;
 
   // ── Derived: project / mode / character / active chat window ──
   const activeProject = (activeProjectId && projects[activeProjectId]) || null;
@@ -685,7 +687,13 @@ export default function App() {
       if (favorBlock) parts.push(favorBlock);
       parts.push(relationshipRulesBlock(projectChars, activeProject?.ocs));
       // HP 专项：注入玩家数值 + 数值/好感度门槛裁决规则（防止自由叙述空口越过数值门槛）
-      if (player.stats) { parts.push(formatStatsLine(player.stats)); parts.push(formatCoursesBlock(player.courses)); parts.push(GATING_RULES); }
+      if (player.stats) {
+        parts.push(formatStatsLine(player.stats));
+        parts.push(formatCoursesBlock(player.courses));
+        parts.push(formatInventoryBlock(player.inventory));
+        parts.push(GATING_RULES);
+        parts.push(INVENTORY_RULES);
+      }
       parts.push(LIFE_SCENE_RULES);
       parts.push(LIFE_SCENE_ENGINE_RULES);
       parts.push(DAILY_GROWTH_RULES);
@@ -1100,13 +1108,30 @@ ${transcriptLines(chunk)}`;
       return;
     }
 
+    // HP 专项：采购 / 获得物品。后台写入背包，显示为对话流里的轻量状态条。
+    const shoppingChanges = HP_KIOSK && activeMode === "world"
+      ? inferShoppingChanges(`${text}\n${hiddenText}`, { currentTimeLabel: activeProject?.currentTimeLabel, wandMeta: player.meta?.wand })
+      : [];
+    const nextInventory = shoppingChanges.length ? applyInventoryChanges(player.inventory, shoppingChanges) : player.inventory;
+    let inventoryAnchor = null;
+    if (shoppingChanges.length) {
+      const shoppingLine = formatInventoryChangeLine(shoppingChanges);
+      inventoryAnchor = `【本回合物品变化】${shoppingLine.replace(/^🎒\s*/, "")}。这些物品已写入玩家背包；请在叙事中自然承认获得或整理它们。`;
+      patchProject((p) => {
+        const pc = p.playerCharacter || {};
+        return { ...p, playerCharacter: { ...pc, inventory: applyInventoryChanges(pc.inventory, shoppingChanges) } };
+      });
+    }
+
     // HP 专项：行动指令（/练咒 …）→ 透明检定。普通对话不触发。
-    let actionAnchor = null, rollLine = null;
+    let actionAnchor = null, rollLine = shoppingChanges.length ? formatInventoryChangeLine(shoppingChanges) : null;
     const explicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
     const naturalCmd = !explicitCmd && !disableActions && HP_KIOSK && activeMode === "world"
       ? inferNaturalCommand(`${text}\n${hiddenText}`, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel })
       : null;
-    const cmd = explicitCmd || naturalCmd;
+    const baseCmd = explicitCmd || naturalCmd;
+    const itemIssue = baseCmd ? inventoryIssueForCommand(baseCmd, nextInventory) : "";
+    const cmd = itemIssue ? { ...baseCmd, blockedReason: baseCmd.blockedReason || itemIssue } : baseCmd;
     let advancePeriodAfterReply = draft?.advancePeriod ?? shouldAdvancePeriod({ messageKind, command: cmd?.command });
     if (cmd && player?.stats) {
       const stamina = Number(player.stats.stamina ?? STAMINA_MAX);
@@ -1114,7 +1139,7 @@ ${transcriptLines(chunk)}`;
 
       if (cmd.action.rest) {
         // 休息：体力全恢复（时间会随回合自然推进）
-        rollLine = `😴 休息 → 体力 ${stamina} → ${STAMINA_MAX}`;
+        rollLine = [rollLine, `😴 休息 → 体力 ${stamina} → ${STAMINA_MAX}`].filter(Boolean).join("  ·  ");
         actionAnchor = "【行动】玩家休息 / 睡眠，体力完全恢复。请叙述一段休息或入睡的过渡，并自然推进到下一时段。";
         patchProject((p) => {
           const pc = p.playerCharacter || {};
@@ -1126,7 +1151,7 @@ ${transcriptLines(chunk)}`;
         if (tgt) {
           const fav = player.favor?.[tgt.id] || 0;
           const ok = fav >= 60;
-          rollLine = `💗 向 ${tgt.name} 告白 —— 好感度 ${fav}（${favorStage(fav)}）→ ${ok ? "接受 ❤" : "被婉拒"}`;
+          rollLine = [rollLine, `💗 向 ${tgt.name} 告白 —— 好感度 ${fav}（${favorStage(fav)}）→ ${ok ? "接受 ❤" : "被婉拒"}`].filter(Boolean).join("  ·  ");
           actionAnchor = `【告白结果（旁白必须据此叙事，不得改判）】玩家向 ${tgt.name} 告白，当前好感度 ${fav}。` +
             (ok ? "已达恋人阈值（≥60），对方接受，二人正式成为恋人。" : "未达恋人阈值（<60），对方婉拒或回避，但不必撕破脸。") +
             "请自然演绎这一刻。";
@@ -1144,7 +1169,7 @@ ${transcriptLines(chunk)}`;
             });
           }
         } else {
-          rollLine = `💗 告白 —— 未指定对象`;
+          rollLine = [rollLine, `💗 告白 —— 未指定对象`].filter(Boolean).join("  ·  ");
           actionAnchor = "【告白】玩家发起告白但未指明对象，请让其先明确心意所向。";
         }
       } else if (cmd.action.exam) {
@@ -1153,7 +1178,7 @@ ${transcriptLines(chunk)}`;
         const existing = activeProject?.examResults?.[settlement.key] || null;
         const results = existing?.results || settlement.results;
         const hp = Number(existing?.hp ?? settlement.hp);
-        rollLine = formatExamLine(results, hp) + (existing ? " · 已结算" : "");
+        rollLine = [rollLine, formatExamLine(results, hp) + (existing ? " · 已结算" : "")].filter(Boolean).join("  ·  ");
         actionAnchor = examAnchor(results, hp, { repeated: !!existing });
         if (!existing) {
           patchProject((p) => {
@@ -1169,11 +1194,11 @@ ${transcriptLines(chunk)}`;
         }
       } else if (cmd.action.ending) {
         // 结局：AI 依终值多元生成，不写死
-        rollLine = `🌅 命运的纺线开始编织……`;
+        rollLine = [rollLine, `🌅 命运的纺线开始编织……`].filter(Boolean).join("  ·  ");
         actionAnchor = "【结局生成（开放 · 多元，禁止套用固定模板）】请依据玩家七年的全部数据——养成数值、各科课程、好感度与关系、学院分、原创角色——" +
           "为 TA 生成一段专属的「十九年后」尾声：职业去向、与重要角色（含 OC）的情感归宿、生活图景。要个性化、贴合其数值与选择，可圆满可有遗憾，不必皆大欢喜。";
       } else if (cmd.blockedReason) {
-        rollLine = `⚠️ 条件不合适：${cmd.action.label}`;
+        rollLine = [rollLine, `⚠️ 条件不合适：${cmd.action.label}`].filter(Boolean).join("  ·  ");
         actionAnchor = `【行动条件不足（旁白必须据此叙事，不得掷骰判成败）】\n` +
           `玩家想尝试：${cmd.action.label}${cmd.target ? `（${cmd.target}）` : ""}\n` +
           `当前地点/时间不适合：${cmd.blockedReason}\n` +
@@ -1181,12 +1206,12 @@ ${transcriptLines(chunk)}`;
         advancePeriodAfterReply = false;
       } else if (stamina < cost) {
         // 体力不足：行动受阻，不掷骰、不结算
-        rollLine = `⚠️ 体力不足 ${stamina}/${cost} —— 先休息恢复`;
+        rollLine = [rollLine, `⚠️ 体力不足 ${stamina}/${cost} —— 先休息恢复`].filter(Boolean).join("  ·  ");
         actionAnchor = `【行动受阻】玩家体力不足（当前 ${stamina}，需 ${cost}），无法完成「${cmd.action.label}」。请叙述其疲惫、力不从心、需要休息；本次不成功，不产生任何数值或好感度变化。`;
         advancePeriodAfterReply = false;
       } else {
         const check = runAction(cmd.action, player);
-        rollLine = `${cmd.inferred ? "🎲 自动判定 · " : ""}${formatRoll(cmd.action, check)}  ·  体力 -${cost}`;
+        rollLine = [rollLine, `${cmd.inferred ? "🎲 自动判定 · " : ""}${formatRoll(cmd.action, check)}  ·  体力 -${cost}`].filter(Boolean).join("  ·  ");
         const deduct = (stats) => { stats.stamina = Math.max(0, (stats.stamina ?? STAMINA_MAX) - cost); };
 
         if (cmd.action.social) {
@@ -1227,6 +1252,7 @@ ${transcriptLines(chunk)}`;
       }
     }
 
+    const supplementalAnchor = [inventoryAnchor, actionAnchor].filter(Boolean).join("\n\n");
     let content;
     if (curAtts.length > 0 && config.apiType === "anthropic") {
       const parts = [];
@@ -1236,10 +1262,10 @@ ${transcriptLines(chunk)}`;
         else if (a.type.startsWith("image/"))
           parts.push({ type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } });
       }
-      if (hiddenText) parts.push({ type: "text", text: actionAnchor ? `${hiddenText}\n\n${actionAnchor}` : hiddenText });
+      if (hiddenText) parts.push({ type: "text", text: supplementalAnchor ? `${hiddenText}\n\n${supplementalAnchor}` : hiddenText });
       content = parts;
     } else {
-      content = actionAnchor ? `${hiddenText}\n\n${actionAnchor}` : hiddenText;
+      content = supplementalAnchor ? `${hiddenText}\n\n${supplementalAnchor}` : hiddenText;
     }
 
     const userMsg = {
@@ -1427,11 +1453,12 @@ ${transcriptLines(chunk)}`;
     ? {
         position: "fixed", top: 10, left: 10, bottom: 10, zIndex: 50,
         width: "86vw", maxWidth: 330, height: "auto",
-        transform: panel ? "translateX(0)" : "translateX(-100%)",
+        transform: panel ? "translateX(0)" : "translateX(calc(-100% - 28px))",
         transition: "transform 0.25s ease",
         border: `1px solid ${V.line}`, borderRadius: 18, background: V.frame,
         boxShadow: panel ? "0 24px 70px rgba(0,0,0,0.58), inset 0 0 0 1px rgba(255,250,226,0.05)" : "none",
         display: "flex", flexDirection: "column",
+        pointerEvents: panel ? "auto" : "none",
       }
     : {
         width: panel ? 330 : 0, minWidth: panel ? 330 : 0,
@@ -1902,62 +1929,84 @@ ${transcriptLines(chunk)}`;
         )}
 
         {/* Input bar */}
-        <div style={{ borderTop: `1px solid ${V.lineSoft}`, background: V.inputBar, padding: "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
+        <div style={{ borderTop: `1px solid ${V.lineSoft}`, background: V.inputBar, padding: isMobile ? "8px 10px calc(10px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto" }}>
           {HP_KIOSK && activeMode === "world" && currentCalendarMoment && !input.trim() && (
             <div
               style={{
-                marginBottom: 9,
+                marginBottom: calendarOpen ? 8 : 6,
                 border: `1px solid ${V.lineSoft}`,
-                borderRadius: 14,
+                borderRadius: 13,
                 background: "rgba(255,250,226,0.055)",
-                padding: "10px 11px",
+                padding: calendarOpen ? "9px 10px" : "7px 9px",
                 boxShadow: "0 10px 22px rgba(0,0,0,0.12)",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: V.ink, lineHeight: 1.2 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: calendarOpen ? 6 : 0 }}>
+                <button
+                  type="button"
+                  onClick={() => setCalendarOpen((v) => !v)}
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    color: V.ink,
+                    fontFamily: "inherit",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span style={{ color: V.gold, fontSize: 13, transform: calendarOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+                  <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontWeight: 800, lineHeight: 1.2 }}>
                     {currentCalendarMoment.title}
-                  </div>
-                  <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.45, color: V.muted }}>
-                    {currentCalendarMoment.note}
-                  </div>
-                </div>
-                <div style={{ flex: "0 0 auto", fontSize: 11, fontWeight: 800, color: V.gold, opacity: 0.9 }}>
+                  </span>
+                </button>
+                <div style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 800, color: V.gold, opacity: 0.9 }}>
                   {currentCalendarMoment.periodLabel || scenePeriod.label}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
-                {currentCalendarMoment.choices.map((choice) => (
-                  <button
-                    key={choice.label}
-                    type="button"
-                    onClick={() => chooseCalendarOption(choice)}
-                    disabled={loading}
-                    title={choice.intent}
-                    style={{
-                      flex: "0 0 auto",
-                      minHeight: 30,
-                      padding: "0 11px",
-                      borderRadius: 999,
-                      border: `1px solid ${V.lineSoft}`,
-                      background: "rgba(255,250,226,0.065)",
-                      color: loading ? V.faint : V.ink,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      fontFamily: "inherit",
-                      cursor: loading ? "not-allowed" : "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {choice.label}
-                  </button>
-                ))}
-              </div>
+              {calendarOpen && (
+                <>
+                  <div style={{ marginBottom: 7, fontSize: 11, lineHeight: 1.45, color: V.muted }}>
+                    {currentCalendarMoment.note}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
+                    {currentCalendarMoment.choices.map((choice) => (
+                      <button
+                        key={choice.label}
+                        type="button"
+                        onClick={() => chooseCalendarOption(choice)}
+                        disabled={loading}
+                        title={choice.intent}
+                        style={{
+                          flex: "0 0 auto",
+                          minHeight: 28,
+                          padding: "0 10px",
+                          borderRadius: 999,
+                          border: `1px solid ${V.lineSoft}`,
+                          background: "rgba(255,250,226,0.065)",
+                          color: loading ? V.faint : V.ink,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          fontFamily: "inherit",
+                          cursor: loading ? "not-allowed" : "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {choice.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 9, border: `1px solid ${V.lineSoft}`, borderRadius: 18, padding: "8px 8px 8px 12px", background: V.inputField }}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, border: `1px solid ${V.lineSoft}`, borderRadius: 16, padding: isMobile ? "6px 7px 6px 10px" : "7px 8px 7px 11px", background: V.inputField }}>
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => handleFiles(Array.from(e.target.files))} />
             <button onClick={() => fileRef.current?.click()} style={{ background: "none", border: "none", cursor: "pointer", color: V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
               <I.Attach />
@@ -1968,14 +2017,14 @@ ${transcriptLines(chunk)}`;
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
               placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
-              rows={2}
-              style={{ flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.5, minHeight: 48, maxHeight: inputMaxHeight, overflowY: "auto", resize: "vertical", padding: "4px 0" }}
+              rows={1}
+              style={{ flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
             />
             <button
               onClick={send}
               disabled={loading || (!input.trim() && !attachments.length)}
               style={{
-                width: 38, height: 38, borderRadius: 16, border: `1px solid ${V.line}`,
+                width: isMobile ? 34 : 38, height: isMobile ? 34 : 38, borderRadius: isMobile ? 14 : 16, border: `1px solid ${V.line}`,
                 background: loading || (!input.trim() && !attachments.length) ? V.softControl : V.seal,
                 color:      loading || (!input.trim() && !attachments.length) ? V.faint : "#f6e4ad",
                 cursor:     loading || (!input.trim() && !attachments.length) ? "not-allowed" : "pointer",

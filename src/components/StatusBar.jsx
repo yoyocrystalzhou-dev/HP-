@@ -1,6 +1,7 @@
 import { GOLD, GOLD_DIM, INK, MUTED, FONT_HUA } from "./hpAtmosphere.jsx";
 import { STAT_DEFS, STAT_MAX, STAMINA_MAX, normalizeStats } from "../lib/stats.js";
 import { COURSES, normalizeCourses } from "../lib/courses.js";
+import { normalizeInventory, missingRequiredItems } from "../lib/inventory.js";
 
 /**
  * 玩家养成数值面板（只读可视化）—— 暗金风。
@@ -16,6 +17,9 @@ export default function StatusBar({ player, variant = "rail", onClose, ocs = [],
   const s = normalizeStats(player.stats);
   const meta = player.meta || {};
   const cs = normalizeCourses(player.courses);
+  const inventory = normalizeInventory(player.inventory);
+  const ownedItems = Object.values(inventory.items);
+  const missingItems = missingRequiredItems(inventory);
 
   const isSheet = variant === "sheet";
   const shell = isSheet
@@ -92,6 +96,18 @@ export default function StatusBar({ player, variant = "rail", onClose, ocs = [],
           擅长：{meta.subjects.join("、")}
         </div>
       )}
+
+      {/* 物品 */}
+      <div style={{ padding: isSheet ? "10px 20px" : "10px 16px", borderTop: "1px solid rgba(232,199,102,0.16)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 5 }}>
+          <span style={{ fontSize: 11.5, color: MUTED }}>🎒 物品</span>
+          {missingItems.length > 0 && <span style={{ fontSize: 10.5, color: GOLD }}>待采购 {missingItems.length}</span>}
+        </div>
+        <div style={{ fontSize: 10.8, color: MUTED, lineHeight: 1.45 }}>
+          {ownedItems.slice(0, isSheet ? 12 : 6).map((i) => i.label).join("、") || "暂无明确物品"}
+          {ownedItems.length > (isSheet ? 12 : 6) ? ` 等 ${ownedItems.length} 件` : ""}
+        </div>
+      </div>
 
       {/* 课程数值 */}
       <div style={{ padding: isSheet ? "12px 20px" : "10px 16px", borderTop: "1px solid rgba(232,199,102,0.16)" }}>
