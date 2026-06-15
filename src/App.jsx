@@ -1617,7 +1617,23 @@ ${transcriptLines(chunk)}`;
   };
   const renderHpSheetContent = () => {
     if (!hpSheet) return null;
-    if (hpSheet === "settings") return <SettingsPanel config={config} onSave={(c) => { setConfig(c); setStatus("配置已保存 ✓"); setTimeout(() => setStatus(""), 2000); setHpSheet(null); }} />;
+    if (hpSheet === "settings") return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <SettingsPanel config={config} onSave={(c) => { setConfig(c); setStatus("配置已保存 ✓"); setTimeout(() => setStatus(""), 2000); setHpSheet(null); }} />
+        <div style={{ padding: "4px 20px 22px", borderTop: `1px solid ${hpUi.line}` }}>
+          <div style={{ fontSize: 11.5, color: hpUi.chromeMuted, margin: "12px 0 8px" }}>危险操作</div>
+          <button
+            onClick={restartGame}
+            style={{ width: "100%", padding: "11px", borderRadius: 12, border: `1px solid ${V.danger}`, background: V.dangerBg, color: V.danger, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            ↻ 重新开始游戏
+          </button>
+          <div style={{ fontSize: 10.5, color: hpUi.chromeMuted, marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>
+            将清除当前世代存档（角色、进度、关系、原创角色），回到角色创建。
+          </div>
+        </div>
+      </div>
+    );
     if (hpSheet === "people") {
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
