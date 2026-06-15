@@ -45,6 +45,7 @@ import {
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
 import { dayPeriod, nextDayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
+import { formatTimetableBlock, timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
@@ -195,6 +196,7 @@ export default function App() {
   const storyMemory = activeProject?.storyMemory || [];
   const scenePeriodId = activeProject?.dayPeriod || "morning";
   const scenePeriod = dayPeriod(scenePeriodId);
+  const currentTimetableContext = timetableContext({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId });
   const currentCalendarMoment = HP_KIOSK && activeMode === "world"
     ? calendarMoment({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
     : null;
@@ -270,7 +272,7 @@ export default function App() {
       display: option.label,
       hiddenText: text,
       kind: "calendarChoice",
-      disableActions: !["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label),
+      disableActions: !(option.mechanic === "课堂" || ["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label)),
       advancePeriod: !(option.nextTimeLabel || option.nextPeriodId),
     });
   };
@@ -644,6 +646,8 @@ export default function App() {
     if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
     if (HP_KIOSK && activeMode === "world") {
       parts.push(formatCalendarPeriodBlock(scenePeriod));
+      const timetableBlock = formatTimetableBlock(currentTimetableContext);
+      if (timetableBlock) parts.push(timetableBlock);
       parts.push(buildHogwartsLifeContext({
         userText,
         period: scenePeriod,

@@ -180,7 +180,7 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
     return withLocationGate("练咒", ACTIONS.练咒, targetAfter(raw, /(漂浮咒|荧光闪烁|阿拉霍洞开|修复如初|除你武器)/) || "咒语练习", text);
   }
 
-  if (has(raw, ["回答问题", "举手回答", "被点名", "课堂展示", "课堂示范", "小测", "随堂测验"])) {
+  if (has(raw, ["按课表上课", "去上课", "上课", "魔咒课", "魔药课", "变形术课", "草药课", "防御术课", "魔法史课", "飞行课", "课堂表现", "回答问题", "举手回答", "被点名", "课堂展示", "课堂示范", "小测", "随堂测验"])) {
     return withLocationGate("课堂", ACTIONS.课堂, "课堂表现", text);
   }
 

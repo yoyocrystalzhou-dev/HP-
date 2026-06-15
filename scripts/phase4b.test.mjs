@@ -16,7 +16,9 @@ import {
 } from "../src/lib/projects.js";
 import { applyInventoryChanges, inferShoppingChanges, hasItem, missingRequiredItems } from "../src/lib/inventory.js";
 import { ACTIONS } from "../src/lib/checks.js";
-import { inventoryIssueForCommand } from "../src/lib/lifeMechanics.js";
+import { inferNaturalCommand, inventoryIssueForCommand } from "../src/lib/lifeMechanics.js";
+import { calendarMoment } from "../src/lib/schoolCalendar.js";
+import { lessonsFor, timetableContext, weekdayForLabel } from "../src/lib/timetable.js";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("  ✗ " + msg); } };
@@ -143,6 +145,25 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
   const blocked = inventoryIssueForCommand({ command: "练咒", action: ACTIONS.练咒 }, player.inventory);
   ok(blocked.includes("魔杖"), "spell practice is blocked without wand");
   ok(!inventoryIssueForCommand({ command: "练咒", action: ACTIONS.练咒 }, withWand), "spell practice allowed after wand acquisition");
+}
+
+// 13. Timetable drives school-life context without forcing weekends/holidays
+{
+  ok(weekdayForLabel("1991年9月2日") === 1, "1991-09-02 is Monday");
+  const mondayMorning = lessonsFor({ currentTimeLabel: "1991年9月2日", periodId: "morning" });
+  ok(mondayMorning.length === 2 && mondayMorning[0].course === "魔咒学", "Monday morning has Charms first");
+
+  const moment = calendarMoment({ currentTimeLabel: "1991年9月2日", periodId: "morning" });
+  ok(moment.title === "上午课表", "calendar moment title reflects class timetable");
+  ok(moment.choices[0].mechanic === "课堂" && moment.choices[0].label.includes("魔咒"), "first daily choice follows current class");
+
+  const cmd = inferNaturalCommand("我想按课表上课：魔咒学（魔咒课教室 · 弗立维教授）", { periodId: "morning", currentTimeLabel: "1991年9月2日" });
+  ok(cmd?.command === "课堂" && !cmd.blockedReason, "scheduled class can naturally trigger class check");
+
+  const weekend = timetableContext({ currentTimeLabel: "1991年9月7日", periodId: "morning" });
+  ok(!weekend.hasClass, "Saturday has no regular class");
+  const holiday = timetableContext({ currentTimeLabel: "1991年12月25日", periodId: "morning" });
+  ok(holiday.holiday && !holiday.hasClass, "Christmas is treated as holiday");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);

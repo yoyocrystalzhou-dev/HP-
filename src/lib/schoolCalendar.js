@@ -1,4 +1,5 @@
 import { labelSortKey } from "./timeline.js";
+import { classChoiceFromTimetable, formatTimetableBlock, timetableContext } from "./timetable.js";
 
 export const CLASS_DAY_RULES = [
   "标准课时：9:00-10:00 上午第1节，10:30-11:30 上午第2节；11:45-12:45 午餐；13:00-14:00 下午第1节，14:30-15:30 下午第2节；17:00-19:00 晚餐。",
@@ -172,17 +173,19 @@ function shoppingMoment() {
   return calendarEvent(19910816);
 }
 
-function dailyMoment(period) {
+function dailyMoment(period, currentTimeLabel = "") {
   const p = dayPeriod(period);
+  const tt = timetableContext({ currentTimeLabel, periodId: p.id });
+  const classChoice = classChoiceFromTimetable(tt);
   const sets = {
     morning: [
-      choice("按课表上课", "我想按今天上午的课表去上课，看看课堂上会发生什么。"),
+      classChoice || choice("按课表上课", "我想按今天上午的课表去上课，看看课堂上会发生什么。", { mechanic: "课堂" }),
       choice("早餐后找人", "早餐后我想找一个合适的人同行或聊天。"),
       choice("去图书馆", "上午我想去图书馆，不预设收获，只看会自然发生什么。"),
       choice("在城堡里走走", "上午我想在城堡里走走，熟悉路线和气氛。"),
     ],
     afternoon: [
-      choice("下午课后活动", "下午课后我想自由安排一段时间，看学校里自然发生什么。"),
+      classChoice || choice("下午课后活动", "下午课后我想自由安排一段时间，看学校里自然发生什么。"),
       choice("去球场看看", "下午我想去魁地奇球场看看训练或选拔动静。"),
       choice("去庭院或黑湖边", "下午我想去庭院或黑湖边透透气。"),
       choice("继续查资料", "下午我想找地方查资料或复习，但不把它固定成数值收益。"),
@@ -207,32 +210,41 @@ function dailyMoment(period) {
     ],
   };
   return {
-    title: `${p.label}安排`,
-    note: "这些是校历和时间段给出的日常入口，不是固定收益菜单。你也可以直接在输入框自由写。",
+    title: classChoice ? `${p.label}课表` : `${p.label}安排`,
+    note: [
+      formatTimetableBlock(tt).replace(/^【今日课表】\n?/, ""),
+      "这些是校历和时间段给出的日常入口，不是固定收益菜单。你也可以直接在输入框自由写。",
+    ].filter(Boolean).join(" "),
     choices: sets[p.id] || sets.morning,
+    timetable: tt,
   };
 }
 
 export function calendarMoment({ currentTimeLabel, periodId }) {
   const k = labelSortKey(currentTimeLabel);
   if (k && k < 19910901) return shoppingMoment();
-  return calendarEvent(k) || dailyMoment(periodId);
+  return calendarEvent(k) || dailyMoment(periodId, currentTimeLabel);
 }
 
 export function buildCalendarChoiceInput(choiceItem, period, currentTimeLabel) {
   const beforeTerm = labelSortKey(currentTimeLabel) && labelSortKey(currentTimeLabel) < 19910901;
+  const tt = timetableContext({ currentTimeLabel, periodId: period?.id || "morning" });
   const p = beforeTerm
     ? "当前阶段：开学前采购日（对角巷采购，不按霍格沃茨校内课表运行）。"
     : (period ? `当前时间段：${period.label}（${period.instruction}）。` : "");
   const t = currentTimeLabel ? `当前日期：${currentTimeLabel}。` : "";
   const schedule = beforeTerm ? "" : `校历作息：${CLASS_DAY_RULES.join(" ")}`;
+  const timetable = beforeTerm ? "" : formatTimetableBlock(tt);
   const next = choiceItem.nextTimeLabel ? `本次选择后，当前日期应推进到：${choiceItem.nextTimeLabel}。` : "";
+  const lesson = choiceItem.lesson ? `本次选择对应课程：${choiceItem.lesson.course}；地点：${choiceItem.lesson.location}；教授：${choiceItem.lesson.teacher}。` : "";
   return [
     "【校历安排】",
     t,
     p,
     schedule,
+    timetable,
     next,
+    lesson,
     choiceItem.intent,
     "请根据校历、当前时间、地点、人物关系和已有记忆自由生成发生的事；这不是固定收益选项。"
   ].filter(Boolean).join("\n");
