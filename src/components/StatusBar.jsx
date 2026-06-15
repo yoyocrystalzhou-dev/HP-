@@ -13,7 +13,7 @@ import { clueSummary } from "../lib/clues.js";
  */
 import { favorStage } from "../lib/affinity.js";
 
-export default function StatusBar({ player, variant = "rail", onClose, ocs = [], clues = [], onAddOc, onRemoveOc, favorList = [], onRestart }) {
+export default function StatusBar({ player, variant = "rail", onClose, ocs = [], clues = [], houseCup = null, onAddOc, onRemoveOc, favorList = [], onRestart }) {
   if (!player?.stats) return null;
   const s = normalizeStats(player.stats);
   const meta = player.meta || {};
@@ -88,11 +88,18 @@ export default function StatusBar({ player, variant = "rail", onClose, ocs = [],
         })}
       </div>
 
-      {/* 学院分 + 擅长 */}
+      {/* 学院杯 + 个人贡献 */}
       <div style={{ padding: isSheet ? "10px 20px 4px" : "12px 16px", borderTop: "1px solid rgba(232,199,102,0.16)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 11.5, color: MUTED }}>🏆 学院分</span>
+        <span style={{ fontSize: 11.5, color: MUTED }}>🏆 个人贡献</span>
         <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>{s.housePoints ?? 0}</span>
       </div>
+      {houseCup?.playerHouse && (
+        <div style={{ padding: isSheet ? "2px 20px 8px" : "0 16px 10px", fontSize: 10.5, color: MUTED, lineHeight: 1.4 }}>
+          学院杯：{houseCup.playerHouse} 第 {houseCup.playerRank || "-"} 名
+          {houseCup.leader ? ` · 领先 ${houseCup.leader}` : ""}
+          {houseCup.settled ? " · 已结算" : ""}
+        </div>
+      )}
       {meta.subjects?.length > 0 && (
         <div style={{ padding: isSheet ? "2px 20px 8px" : "0 16px 10px", fontSize: 10.5, color: MUTED }}>
           擅长：{meta.subjects.join("、")}

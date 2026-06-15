@@ -50,6 +50,7 @@ import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrow
 import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
+import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -196,6 +197,7 @@ export default function App() {
   const worldMemory = activeProject?.worldMemory || [];
   const storyMemory = activeProject?.storyMemory || [];
   const clues = activeProject?.clues || [];
+  const houseCup = HP_KIOSK ? houseCupSummary(player, activeProject?.currentTimeLabel, activeProject?.houseCupResults) : null;
   const scenePeriodId = activeProject?.dayPeriod || "morning";
   const scenePeriod = dayPeriod(scenePeriodId);
   const currentTimetableContext = timetableContext({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId });
@@ -697,6 +699,7 @@ export default function App() {
       // HP 专项：注入玩家数值 + 数值/好感度门槛裁决规则（防止自由叙述空口越过数值门槛）
       if (player.stats) {
         parts.push(formatStatsLine(player.stats));
+        parts.push(formatHouseCupBlock(player, activeProject?.currentTimeLabel, activeProject?.houseCupResults));
         parts.push(formatCoursesBlock(player.courses));
         parts.push(formatInventoryBlock(player.inventory));
         parts.push(GATING_RULES);
@@ -1143,6 +1146,20 @@ ${transcriptLines(chunk)}`;
 
     // HP 专项：行动指令（/练咒 …）→ 透明检定。普通对话不触发。
     let actionAnchor = null, rollLine = shoppingChanges.length ? formatInventoryChangeLine(shoppingChanges) : null;
+    let cupAnchor = null;
+    if (HP_KIOSK && activeMode === "world") {
+      const settlement = settleHouseCup({ player, currentTimeLabel: activeProject?.currentTimeLabel, houseCupResults: activeProject?.houseCupResults });
+      if (settlement) {
+        rollLine = [rollLine, formatHouseCupLine(settlement)].filter(Boolean).join("  ·  ");
+        cupAnchor = houseCupAnchor(settlement);
+        if (settlement.isNew) {
+          patchProject((p) => ({
+            ...p,
+            houseCupResults: { ...(p.houseCupResults || {}), [settlement.result.key]: settlement.result },
+          }));
+        }
+      }
+    }
     const explicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
     const naturalCmd = !explicitCmd && !disableActions && HP_KIOSK && activeMode === "world"
       ? inferNaturalCommand(`${text}\n${hiddenText}`, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel })
@@ -1270,7 +1287,7 @@ ${transcriptLines(chunk)}`;
       }
     }
 
-    const supplementalAnchor = [inventoryAnchor, actionAnchor].filter(Boolean).join("\n\n");
+    const supplementalAnchor = [inventoryAnchor, cupAnchor, actionAnchor].filter(Boolean).join("\n\n");
     let content;
     if (curAtts.length > 0 && config.apiType === "anthropic") {
       const parts = [];
@@ -1616,7 +1633,7 @@ ${transcriptLines(chunk)}`;
 
       {/* ════ HP 专项：玩家养成数值面板（桌面左侧栏）════ */}
       {HP_KIOSK && !isMobile && activeMode === "world" && player?.stats && (
-        <StatusBar player={player} variant="rail" favorList={favorList} onRestart={restartGame}
+        <StatusBar player={player} variant="rail" favorList={favorList} houseCup={houseCup} onRestart={restartGame}
           ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => setOcCreatorOpen(true)} onRemoveOc={removeOc} />
       )}
 
@@ -1624,7 +1641,7 @@ ${transcriptLines(chunk)}`;
       {HP_KIOSK && isMobile && statsOpen && player?.stats && (
         <div onClick={() => setStatsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "82vh", overflow: "auto", background: "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTop: "1px solid rgba(232,199,102,0.3)", boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}>
-            <StatusBar player={player} variant="sheet" onClose={() => setStatsOpen(false)} favorList={favorList} onRestart={restartGame}
+            <StatusBar player={player} variant="sheet" onClose={() => setStatsOpen(false)} favorList={favorList} houseCup={houseCup} onRestart={restartGame}
               ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => { setStatsOpen(false); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
           </div>
         </div>

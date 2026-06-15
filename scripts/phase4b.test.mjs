@@ -20,6 +20,7 @@ import { inferNaturalCommand, inventoryIssueForCommand } from "../src/lib/lifeMe
 import { calendarMoment } from "../src/lib/schoolCalendar.js";
 import { lessonsFor, timetableContext, weekdayForLabel } from "../src/lib/timetable.js";
 import { activeClues, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "../src/lib/clues.js";
+import { formatHouseCupBlock, houseCupBoard, houseCupSummary, settleHouseCup } from "../src/lib/houseCup.js";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("  ✗ " + msg); } };
@@ -183,6 +184,34 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
   ok(activeClues(merged.clues).length === 2, "merged clues remain active");
   ok(formatCluesBlock(merged.clues).includes("不可扩成新世界观谜团"), "clue prompt includes anti-mystery guard");
   ok(formatClueLine(merged.applied).includes("线索更新"), "clue roll line formats");
+}
+
+// 15. House Cup separates player contribution from canon-locked final result
+{
+  const player = createPlayerCharacter({
+    name: "我",
+    meta: { house: "斯莱特林" },
+    stats: { housePoints: 80 },
+  });
+  const beforeFinal = houseCupBoard(player, "1992年5月23日");
+  ok(beforeFinal.scores["斯莱特林"] >= 446, "pre-final board includes player house contribution");
+  ok(beforeFinal.playerContribution === 80, "board exposes personal contribution");
+
+  const settlement = settleHouseCup({ player, currentTimeLabel: "1992年6月20日", houseCupResults: {} });
+  ok(settlement?.isNew === true, "final feast creates a new House Cup settlement");
+  ok(settlement.result.winner === "格兰芬多", "1991-1992 House Cup winner is canon-locked to Gryffindor");
+  ok(settlement.result.playerHouse === "斯莱特林" && settlement.result.honor === "年度突出贡献", "non-winning player house still gets personal honor");
+
+  const again = settleHouseCup({
+    player,
+    currentTimeLabel: "1992年6月21日",
+    houseCupResults: { [settlement.result.key]: settlement.result },
+  });
+  ok(again?.isNew === false, "settled House Cup is idempotent");
+
+  const summary = houseCupSummary(player, "1992年6月21日", { [settlement.result.key]: settlement.result });
+  ok(summary.settled && summary.leader === "格兰芬多", "summary reads settled final board");
+  ok(formatHouseCupBlock(player, "1992年6月20日").includes("不得改判冠军"), "prompt block includes canon guard");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);
