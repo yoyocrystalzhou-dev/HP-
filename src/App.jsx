@@ -726,7 +726,10 @@ export default function App() {
   // ── Build system prompt (mode-aware; shared-state block + this-window block) ──
   const buildSystem = (userText) => {
     const parts = [];
-    if (activeProject?.instructions?.trim()) parts.push(activeProject.instructions.trim());
+    // HP 专项预设项目：硬规则以「内置预设」为单一可信源（实时读取），这样规则更新能
+    // 立刻作用于已有存档，而不是停留在建档时烘焙进项目的旧副本。其余项目用自身 instructions。
+    const liveInstructions = activePreset?.instructions || activeProject?.instructions;
+    if (liveInstructions?.trim()) parts.push(liveInstructions.trim());
 
     const projectFileBlocks = formatProjectFiles(projectFiles);
     if (projectFileBlocks.length) parts.push(`【项目文件】\n${projectFileBlocks.join("\n\n")}`);
