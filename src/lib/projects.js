@@ -47,7 +47,7 @@ import { uid } from "./utils.js";
 import { store } from "./storage.js";
 import { createInitialInventory, normalizeInventory } from "./inventory.js";
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 /** The player character's fixed id (the user's own avatar in the world). */
 export const PLAYER_ID = "player";
@@ -254,6 +254,7 @@ export function createProject(partial = {}) {
     worldMemory: partial.worldMemory || [],
     storyMemory: partial.storyMemory || [],
     ocs: partial.ocs || [], // HP 专项：玩家自创原创角色（与锁定的 canon 角色分开）
+    clues: partial.clues || [], // HP 专项：受限线索 / 小支线，不等同于世界观事实
     characters,
     playerCharacter: partial.playerCharacter ? createPlayerCharacter(partial.playerCharacter) : createPlayerCharacter(),
     worldChatIds: partial.worldChatIds || [],
@@ -543,6 +544,7 @@ export function migrateAll(projects, sessions) {
         currentTimeLabel: typeof migratedProj.currentTimeLabel === "string" ? migratedProj.currentTimeLabel : "",
         currentState: createCurrentState(migratedProj.currentState),
         files: normalizeFiles(migratedProj.files),
+        clues: Array.isArray(migratedProj.clues) ? migratedProj.clues : [],
         schemaVersion: SCHEMA_VERSION,
         updatedAt: Date.now(),
       };
@@ -590,6 +592,7 @@ export function migrateAll(projects, sessions) {
       worldBook: proj.worldBook || [],
       worldMemory,
       storyMemory,
+      clues: Array.isArray(proj.clues) ? proj.clues : [],
       characters,
       playerCharacter: proj.playerCharacter ? createPlayerCharacter(proj.playerCharacter) : createPlayerCharacter(),
       worldChatIds: [wc.id],

@@ -2,6 +2,7 @@ import { GOLD, GOLD_DIM, INK, MUTED, FONT_HUA } from "./hpAtmosphere.jsx";
 import { STAT_DEFS, STAT_MAX, STAMINA_MAX, normalizeStats } from "../lib/stats.js";
 import { COURSES, normalizeCourses } from "../lib/courses.js";
 import { normalizeInventory, missingRequiredItems } from "../lib/inventory.js";
+import { clueSummary } from "../lib/clues.js";
 
 /**
  * 玩家养成数值面板（只读可视化）—— 暗金风。
@@ -12,7 +13,7 @@ import { normalizeInventory, missingRequiredItems } from "../lib/inventory.js";
  */
 import { favorStage } from "../lib/affinity.js";
 
-export default function StatusBar({ player, variant = "rail", onClose, ocs = [], onAddOc, onRemoveOc, favorList = [], onRestart }) {
+export default function StatusBar({ player, variant = "rail", onClose, ocs = [], clues = [], onAddOc, onRemoveOc, favorList = [], onRestart }) {
   if (!player?.stats) return null;
   const s = normalizeStats(player.stats);
   const meta = player.meta || {};
@@ -20,6 +21,7 @@ export default function StatusBar({ player, variant = "rail", onClose, ocs = [],
   const inventory = normalizeInventory(player.inventory);
   const ownedItems = Object.values(inventory.items);
   const missingItems = missingRequiredItems(inventory);
+  const cluesInfo = clueSummary(clues);
 
   const isSheet = variant === "sheet";
   const shell = isSheet
@@ -149,6 +151,19 @@ export default function StatusBar({ player, variant = "rail", onClose, ocs = [],
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 受限线索 */}
+      {cluesInfo.activeCount > 0 && (
+        <div style={{ padding: isSheet ? "12px 20px" : "10px 16px", borderTop: "1px solid rgba(232,199,102,0.16)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 5 }}>
+            <span style={{ fontSize: 11.5, color: MUTED }}>🧩 未解线索</span>
+            <span style={{ fontSize: 10.5, color: GOLD }}>{cluesInfo.activeCount}</span>
+          </div>
+          <div style={{ fontSize: 10.8, color: MUTED, lineHeight: 1.45 }}>
+            {cluesInfo.unresolvedTitles.join("、")}
+          </div>
         </div>
       )}
 

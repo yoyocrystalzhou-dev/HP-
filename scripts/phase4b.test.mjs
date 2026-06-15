@@ -19,6 +19,7 @@ import { ACTIONS } from "../src/lib/checks.js";
 import { inferNaturalCommand, inventoryIssueForCommand } from "../src/lib/lifeMechanics.js";
 import { calendarMoment } from "../src/lib/schoolCalendar.js";
 import { lessonsFor, timetableContext, weekdayForLabel } from "../src/lib/timetable.js";
+import { activeClues, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "../src/lib/clues.js";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("  ✗ " + msg); } };
@@ -164,6 +165,24 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
   ok(!weekend.hasClass, "Saturday has no regular class");
   const holiday = timetableContext({ currentTimeLabel: "1991年12月25日", periodId: "morning" });
   ok(holiday.holiday && !holiday.hasClass, "Christmas is treated as holiday");
+}
+
+// 14. Restricted clue tracker accepts recoverable clues and rejects world-scale mysteries
+{
+  const canon = parseClueTags("正文。\n【线索：类型=原著回声；标题=禁书区借阅记录；原著关联=尼可·勒梅/魔法石；阶段=怀疑；人物=赫敏；进展=有人最近查过尼可·勒梅；期限=3】");
+  ok(canon.cleaned === "正文。", "clue tag is hidden from visible reply");
+  ok(canon.entries.length === 1 && canon.entries[0].type === "canon", "canon clue with anchor is accepted");
+
+  const daily = parseClueTags("【线索：类型=日常小支线；标题=丢失的羽毛笔；阶段=初见；人物=室友；进展=室友怀疑有人误拿；期限=2】");
+  ok(daily.entries.length === 1 && daily.entries[0].turnsLeft === 2, "small daily clue is accepted with deadline");
+
+  const bad = parseClueTags("【线索：类型=日常小支线；标题=古老神器的预言；阶段=初见；进展=一个未知组织似乎影响魔法界命运；期限=3】");
+  ok(bad.entries.length === 0, "large invented mystery is rejected");
+
+  const merged = mergeClues([], [...canon.entries, ...daily.entries]);
+  ok(activeClues(merged.clues).length === 2, "merged clues remain active");
+  ok(formatCluesBlock(merged.clues).includes("不可扩成新世界观谜团"), "clue prompt includes anti-mystery guard");
+  ok(formatClueLine(merged.applied).includes("线索更新"), "clue roll line formats");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);

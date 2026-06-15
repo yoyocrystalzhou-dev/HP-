@@ -49,6 +49,7 @@ import { formatTimetableBlock, timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
+import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -194,6 +195,7 @@ export default function App() {
   const projectFiles = activeProject?.files || [];
   const worldMemory = activeProject?.worldMemory || [];
   const storyMemory = activeProject?.storyMemory || [];
+  const clues = activeProject?.clues || [];
   const scenePeriodId = activeProject?.dayPeriod || "morning";
   const scenePeriod = dayPeriod(scenePeriodId);
   const currentTimetableContext = timetableContext({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId });
@@ -690,6 +692,8 @@ export default function App() {
       const favorBlock = formatFavorBlock(player.favor, favorNameById);
       if (favorBlock) parts.push(favorBlock);
       parts.push(relationshipRulesBlock(projectChars, activeProject?.ocs));
+      const clueBlock = formatCluesBlock(clues);
+      if (clueBlock) parts.push(clueBlock);
       // HP 专项：注入玩家数值 + 数值/好感度门槛裁决规则（防止自由叙述空口越过数值门槛）
       if (player.stats) {
         parts.push(formatStatsLine(player.stats));
@@ -701,6 +705,7 @@ export default function App() {
       parts.push(LIFE_SCENE_RULES);
       parts.push(LIFE_SCENE_ENGINE_RULES);
       parts.push(DAILY_GROWTH_RULES);
+      parts.push(CLUE_RULES);
       // Player character — the user's own role in the world.
       const pseg = [`【玩家角色（用户扮演）：${player.name}】`];
       if (player.persona?.trim()) pseg.push(player.persona.trim());
@@ -1015,9 +1020,13 @@ ${transcriptLines(chunk)}`;
       const relationship = allowRelationshipDeltas
         ? parseRelationshipDeltas(daily.cleaned || finalText, projectChars, activeProject?.ocs || [])
         : { cleaned: daily.cleaned || finalText, entries: [] };
-      const visibleText = relationship.cleaned || daily.cleaned || finalText;
+      const clueParse = HP_KIOSK && activeMode === "world"
+        ? parseClueTags(relationship.cleaned || daily.cleaned || finalText)
+        : { cleaned: relationship.cleaned || daily.cleaned || finalText, entries: [] };
+      const visibleText = clueParse.cleaned || relationship.cleaned || daily.cleaned || finalText;
       const dailyGrowthLine = formatDailyGrowth(daily.entries);
       let relationshipLine = "";
+      let clueLine = "";
 
       if (daily.entries.length) {
         patchProject((p) => {
@@ -1034,7 +1043,12 @@ ${transcriptLines(chunk)}`;
         });
         relationshipLine = formatRelationshipDeltaLine(appliedPreview);
       }
-      const rollLine = [dailyGrowthLine, relationshipLine].filter(Boolean).join("   ");
+      if (clueParse.entries.length) {
+        const preview = mergeClues(activeProject?.clues || [], clueParse.entries);
+        patchProject((p) => ({ ...p, clues: mergeClues(p.clues || [], clueParse.entries).clues }));
+        clueLine = formatClueLine(preview.applied);
+      }
+      const rollLine = [dailyGrowthLine, relationshipLine, clueLine].filter(Boolean).join("   ");
 
       setSessions((prev) => {
         const s = prev[sid];
@@ -1603,7 +1617,7 @@ ${transcriptLines(chunk)}`;
       {/* ════ HP 专项：玩家养成数值面板（桌面左侧栏）════ */}
       {HP_KIOSK && !isMobile && activeMode === "world" && player?.stats && (
         <StatusBar player={player} variant="rail" favorList={favorList} onRestart={restartGame}
-          ocs={activeProject?.ocs || []} onAddOc={() => setOcCreatorOpen(true)} onRemoveOc={removeOc} />
+          ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => setOcCreatorOpen(true)} onRemoveOc={removeOc} />
       )}
 
       {/* 移动端：数值底部抽屉 */}
@@ -1611,7 +1625,7 @@ ${transcriptLines(chunk)}`;
         <div onClick={() => setStatsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "82vh", overflow: "auto", background: "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTop: "1px solid rgba(232,199,102,0.3)", boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}>
             <StatusBar player={player} variant="sheet" onClose={() => setStatsOpen(false)} favorList={favorList} onRestart={restartGame}
-              ocs={activeProject?.ocs || []} onAddOc={() => { setStatsOpen(false); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
+              ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => { setStatsOpen(false); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
           </div>
         </div>
       )}
