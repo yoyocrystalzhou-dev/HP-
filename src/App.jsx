@@ -53,7 +53,7 @@ import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, 
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
-import { NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
+import { CornerFlourish, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -1700,12 +1700,40 @@ ${transcriptLines(chunk)}`;
           {/* Centre */}
           {HP_KIOSK ? (
             /* HP 专项：时间 + 学年阶段（挪到头部正中）*/
-            <div style={{ flex: HP_KIOSK && isMobile ? "1 0 100%" : "1 1 0", order: HP_KIOSK && isMobile ? 3 : 0, minWidth: 0, display: "flex", alignItems: "center", gap: 6, justifyContent: "center", overflow: HP_KIOSK && isMobile ? "visible" : "hidden", padding: HP_KIOSK && isMobile ? "0 4px" : "0 8px" }}>
-              <span style={{ color: V.gold, fontSize: 12 }}>📅</span>
-              <span style={{ fontSize: isMobile ? 12.5 : 13, fontWeight: 700, color: V.ink, overflow: HP_KIOSK && isMobile ? "visible" : "hidden", textOverflow: HP_KIOSK && isMobile ? "clip" : "ellipsis", whiteSpace: HP_KIOSK && isMobile ? "normal" : "nowrap", textAlign: "center", lineHeight: 1.25 }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
-              {!isMobile && currentCanonBeat && phaseName(currentCanonBeat) && (
-                <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>· {phaseName(currentCanonBeat)}</span>
-              )}
+            <div style={{ flex: HP_KIOSK && isMobile ? "1 0 100%" : "1 1 0", order: HP_KIOSK && isMobile ? 3 : 0, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: HP_KIOSK && isMobile ? "visible" : "hidden", padding: HP_KIOSK && isMobile ? "0 4px" : "0 8px" }}>
+              <div
+                title={currentCanonBeat ? `${currentCanonBeat.part}｜原著：${currentCanonBeat.event}` : "当前时间"}
+                style={{
+                  maxWidth: isMobile ? "100%" : 560,
+                  minWidth: isMobile ? 0 : 220,
+                  display: "grid",
+                  gridTemplateColumns: "minmax(20px, 1fr) auto minmax(20px, 1fr)",
+                  alignItems: "center",
+                  gap: isMobile ? 7 : 11,
+                  padding: isMobile ? "3px 6px" : "5px 10px",
+                  color: V.ink,
+                }}
+              >
+                <span style={{ height: 1, background: `linear-gradient(90deg, transparent, ${V.line})`, position: "relative" }}>
+                  <span style={{ position: "absolute", right: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: V.gold, opacity: 0.75 }} />
+                </span>
+                <span style={{ minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 2px" }}>
+                  <span style={{ color: V.gold, display: "flex", opacity: 0.86, flexShrink: 0 }}><I.Calendar /></span>
+                  <span style={{ minWidth: 0, display: "flex", flexWrap: isMobile ? "wrap" : "nowrap", alignItems: "baseline", justifyContent: "center", gap: "2px 7px", textAlign: "center" }}>
+                    <span style={{ fontFamily: V.serif, fontSize: isMobile ? 13 : 14, fontWeight: 800, color: V.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap", lineHeight: 1.2 }}>
+                      {activeProject.currentTimeLabel || "未设定时间"}
+                    </span>
+                    {currentCanonBeat && phaseName(currentCanonBeat) && (
+                      <span style={{ color: V.muted, fontSize: isMobile ? 10.5 : 11.5, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5 }}>
+                        {phaseName(currentCanonBeat)}
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <span style={{ height: 1, background: `linear-gradient(90deg, ${V.line}, transparent)`, position: "relative" }}>
+                  <span style={{ position: "absolute", left: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: V.gold, opacity: 0.75 }} />
+                </span>
+              </div>
             </div>
           ) : (
             <div style={{ flex: "0 1 auto", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", minWidth: isMobile ? 0 : 220, maxWidth: isMobile ? "none" : 420, overflow: "hidden", padding: "0 8px" }}>
@@ -1737,7 +1765,8 @@ ${transcriptLines(chunk)}`;
                 title="养成数值"
                 style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 11px", border: `1px solid ${V.lineSoft}`, borderRadius: 999, background: V.softControl, color: V.ink, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
               >
-                📖 状态
+                <I.Book />
+                <span>状态</span>
               </button>
             )}
             {HP_KIOSK && (
@@ -1787,7 +1816,7 @@ ${transcriptLines(chunk)}`;
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: isMobile ? "20px 10px 24px" : "34px 26px 38px" }}>
           {messages.length === 0 && HP_KIOSK && (
             <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: "rgba(243,233,210,0.55)", fontSize: 14, lineHeight: 1.7 }}>
-              {config.apiKey ? "在下方描述你的行动，开启 1991 学年。" : "先在右上角 ⚙ 填写 API Key。"}
+              {config.apiKey ? "在下方描述你的行动，开启 1991 学年。" : "先在右上角配置 API Key。"}
             </div>
           )}
           {messages.length === 0 && !HP_KIOSK && (
@@ -1857,6 +1886,92 @@ ${transcriptLines(chunk)}`;
               fontFamily: "inherit",
               padding: "4px 9px",
             });
+            if (HP_KIOSK) {
+              const frameInk = isUser ? "rgba(120,72,46,0.88)" : "rgba(94,48,38,0.92)";
+              const label = isUser ? "你" : "旁白";
+              return (
+                <Fragment key={msgId}>
+                  <article
+                    style={{
+                      width: "100%",
+                      maxWidth: isUser ? 760 : 840,
+                      margin: isMobile ? "0 auto 18px" : "0 auto 24px",
+                      animation: "fadeUp 0.18s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "relative",
+                        boxSizing: "border-box",
+                        padding: isMobile ? "18px 17px 16px" : "22px 24px 20px",
+                        border: `1.2px solid ${frameInk}`,
+                        borderRadius: isMobile ? 12 : 14,
+                        background:
+                          "linear-gradient(180deg, rgba(247,232,190,0.96), rgba(223,199,149,0.94))," +
+                          "repeating-linear-gradient(0deg, rgba(96,56,38,0.075) 0 1px, transparent 1px 24px)",
+                        color: "#3a261b",
+                        boxShadow: "0 16px 42px rgba(0,0,0,0.34), inset 0 0 0 5px rgba(255,246,219,0.22)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <CornerFlourish pos="tl" color={frameInk} size={isMobile ? 24 : 30} />
+                      <CornerFlourish pos="tr" color={frameInk} size={isMobile ? 24 : 30} />
+                      <CornerFlourish pos="br" color={frameInk} size={isMobile ? 24 : 30} />
+                      <CornerFlourish pos="bl" color={frameInk} size={isMobile ? 24 : 30} />
+                      <div style={{ position: "relative", zIndex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                          <span style={{ height: 1, width: 26, background: `linear-gradient(90deg, transparent, ${frameInk})`, opacity: 0.62 }} />
+                          <span style={{ fontFamily: V.serif, color: frameInk, fontSize: 12, fontWeight: 900, letterSpacing: 2.2 }}>{label}</span>
+                          <span style={{ height: 1, flex: 1, background: `linear-gradient(90deg, ${frameInk}, transparent)`, opacity: 0.28 }} />
+                        </div>
+                        {m.attachments?.length > 0 && (
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                            {m.attachments.map((a, j) => (
+                              <span key={j} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: `1px solid rgba(94,48,38,0.24)`, borderRadius: 999, padding: "1px 7px", fontSize: 11, color: "rgba(58,38,27,0.72)", background: "rgba(255,246,219,0.3)" }}>
+                                附件：{a.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {isEditing ? (
+                          <textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={Math.min(8, Math.max(3, editDraft.split("\n").length))}
+                            style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(94,48,38,0.32)", borderRadius: 10, background: "rgba(255,246,219,0.42)", color: "#3a261b", fontSize: 14, fontFamily: "inherit", lineHeight: 1.65, padding: "9px 11px", resize: "vertical", outline: "none" }}
+                          />
+                        ) : (
+                          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: isUser ? 14 : 14.5, lineHeight: isMobile ? 1.72 : 1.82, fontFamily: V.serif }}>
+                            {typeof displayText === "string" ? displayText : typeof m.content === "string" ? m.content : "[多模态消息]"}
+                            {m.streaming && <span style={{ opacity: 0.55, animation: "blink 1s infinite" }}>▋</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {isEditing ? (
+                      <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "center" }}>
+                        <button onClick={() => saveEditedMessage(msgId)} disabled={loading} style={editButton(loading)}>保存并重生成</button>
+                        <button onClick={() => { setEditingMsgId(null); setEditDraft(""); }} style={editButton()}>取消</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 5, marginTop: 7, justifyContent: "center", opacity: 0.42 }}>
+                        <button title="Regenerate" onClick={() => regenerateFrom(msgId)} disabled={loading || m.streaming} style={actionButton(loading || m.streaming)}>↻</button>
+                        <button title="Copy" onClick={() => copyMessage(m)} disabled={m.streaming} style={actionButton(m.streaming)}>⧉</button>
+                        <button title="Edit" onClick={() => startEditMessage(m, msgId)} disabled={loading || m.streaming || !isUser} style={actionButton(loading || m.streaming || !isUser)}>✎</button>
+                        <button title="Delete" onClick={() => deleteMessage(msgId)} disabled={m.streaming} style={actionButton(m.streaming)}>⌫</button>
+                      </div>
+                    )}
+                  </article>
+                  {m.roll && (
+                    <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
+                      <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: "rgba(232,199,102,0.08)", border: "1px solid rgba(232,199,102,0.28)", color: "#d8c79a", fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
+                        {m.roll}
+                      </div>
+                    </div>
+                  )}
+                </Fragment>
+              );
+            }
             return (
               <Fragment key={msgId}>
               <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", alignItems: "flex-start", gap: isMobile ? 8 : 12, marginBottom: m.roll ? 10 : (isMobile ? 22 : 28), animation: "fadeUp 0.18s ease" }}>
@@ -2041,9 +2156,30 @@ ${transcriptLines(chunk)}`;
               )}
             </div>
           )}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, border: `1px solid ${V.lineSoft}`, borderRadius: 16, padding: isMobile ? "6px 7px 6px 10px" : "7px 8px 7px 11px", background: V.inputField }}>
+          <div style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "flex-end",
+            gap: 8,
+            border: HP_KIOSK ? "1px solid rgba(120,72,46,0.74)" : `1px solid ${V.lineSoft}`,
+            borderRadius: HP_KIOSK ? 12 : 16,
+            padding: isMobile ? "8px 9px 8px 11px" : "9px 10px 9px 13px",
+            background: HP_KIOSK
+              ? "linear-gradient(180deg, rgba(239,222,181,0.96), rgba(210,185,132,0.94))"
+              : V.inputField,
+            boxShadow: HP_KIOSK ? "0 14px 34px rgba(0,0,0,0.28), inset 0 0 0 4px rgba(255,246,219,0.18)" : undefined,
+            overflow: "hidden",
+          }}>
+            {HP_KIOSK && (
+              <>
+                <CornerFlourish pos="tl" color="rgba(120,72,46,0.78)" size={22} />
+                <CornerFlourish pos="tr" color="rgba(120,72,46,0.78)" size={22} />
+                <CornerFlourish pos="br" color="rgba(120,72,46,0.78)" size={22} />
+                <CornerFlourish pos="bl" color="rgba(120,72,46,0.78)" size={22} />
+              </>
+            )}
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => handleFiles(Array.from(e.target.files))} />
-            <button onClick={() => fileRef.current?.click()} style={{ background: "none", border: "none", cursor: "pointer", color: V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
+            <button onClick={() => fileRef.current?.click()} style={{ position: "relative", zIndex: 1, background: "none", border: "none", cursor: "pointer", color: HP_KIOSK ? "rgba(94,48,38,0.8)" : V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
               <I.Attach />
             </button>
             <textarea
@@ -2053,7 +2189,7 @@ ${transcriptLines(chunk)}`;
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
               placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
               rows={1}
-              style={{ flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: "inherit", color: V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
+              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? "#3a261b" : V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
             />
             <button
               onClick={() => send()}
@@ -2063,7 +2199,7 @@ ${transcriptLines(chunk)}`;
                 background: loading || (!input.trim() && !attachments.length) ? V.softControl : V.seal,
                 color:      loading || (!input.trim() && !attachments.length) ? V.faint : "#f6e4ad",
                 cursor:     loading || (!input.trim() && !attachments.length) ? "not-allowed" : "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
+                position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 0.15s", boxShadow: "inset 0 2px 10px rgba(255,255,255,0.12)",
               }}
             >
