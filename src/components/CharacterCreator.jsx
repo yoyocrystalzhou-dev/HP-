@@ -190,12 +190,12 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
                   </button>
                 ))}
               </div>
-              <input style={field} placeholder="家庭细节（可选）：父母职业、家境、家族往事…" value={familyDetail} maxLength={60} onChange={(e) => setFamilyDetail(e.target.value)} />
+              <textarea style={{ ...field, minHeight: 100, resize: "vertical" }} placeholder="家庭细节（可选）：父母职业、家境、家族往事…" value={familyDetail} maxLength={240} onChange={(e) => setFamilyDetail(e.target.value)} />
             </div>
           )}
 
           {step === 4 && (
-            <textarea style={{ ...field, minHeight: 130, resize: "none" }} placeholder="描述你的相貌：发色、瞳色、身形、气质、特征…（可留空）" value={appearance} maxLength={140} onChange={(e) => setAppearance(e.target.value)} />
+            <textarea style={{ ...field, minHeight: 170, resize: "vertical" }} placeholder="描述你的相貌：发色、瞳色、身形、气质、特征…（可留空）" value={appearance} maxLength={300} onChange={(e) => setAppearance(e.target.value)} />
           )}
 
           {step === 5 && (
@@ -255,7 +255,7 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
               </div>
               <div>
                 <div style={label}>性格 / 自我设定</div>
-                <textarea style={{ ...field, minHeight: 96, resize: "none" }} placeholder="描述你的性格、为人、口头禅、立场…（可留空）" value={intro} maxLength={160} onChange={(e) => setIntro(e.target.value)} />
+                <textarea style={{ ...field, minHeight: 150, resize: "vertical" }} placeholder="描述你的性格、为人、口头禅、立场…（可留空）" value={intro} maxLength={320} onChange={(e) => setIntro(e.target.value)} />
               </div>
             </div>
           )}
@@ -265,7 +265,7 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
               <div>
                 <div style={label}>特殊经历</div>
                 <textarea
-                  style={{ ...field, minHeight: 92, resize: "vertical" }}
+                  style={{ ...field, minHeight: 150, resize: "vertical" }}
                   placeholder="例如：曾经在麻瓜世界发生过一次无法解释的魔法暴走；小时候见过某个奇怪的黑袍人…（可留空）"
                   value={specialExperience}
                   maxLength={500}
@@ -275,7 +275,7 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
               <div>
                 <div style={label}>隐藏设定 / 伏笔</div>
                 <textarea
-                  style={{ ...field, minHeight: 82, resize: "vertical" }}
+                  style={{ ...field, minHeight: 120, resize: "vertical" }}
                   placeholder="只有主控和旁白知道的设定、秘密、长期伏笔；AI 可以参考，但不能替玩家公开。"
                   value={hiddenSetting}
                   maxLength={500}
@@ -285,7 +285,7 @@ export default function CharacterCreator({ generation, onComplete, onCancel }) {
               <div>
                 <div style={label}>主控补充</div>
                 <textarea
-                  style={{ ...field, minHeight: 82, resize: "vertical" }}
+                  style={{ ...field, minHeight: 120, resize: "vertical" }}
                   placeholder="你希望旁白长期遵守的补充：关系倾向、禁忌、想玩的主题、不要乱猜的内容…"
                   value={gmNotes}
                   maxLength={500}

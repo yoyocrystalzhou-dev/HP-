@@ -74,17 +74,17 @@ export default function OcCreator({ canonNames = [], onSave, onCancel }) {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               {FAMILIES.map((f) => <button key={f} style={{ ...chip(family === f), padding: "6px 12px", fontSize: 12.5 }} onClick={() => setFamily(family === f ? "" : f)}>{f}</button>)}
             </div>
-            <input style={field} placeholder="家庭细节（可选）：父母、家境、家族往事…" value={familyDetail} maxLength={60} onChange={(e) => setFamilyDetail(e.target.value)} />
+            <textarea style={{ ...field, minHeight: 92, resize: "vertical" }} placeholder="家庭细节（可选）：父母、家境、家族往事…" value={familyDetail} maxLength={240} onChange={(e) => setFamilyDetail(e.target.value)} />
           </div>
 
           <div>
             <div style={label}>相貌（可选）</div>
-            <textarea style={{ ...field, minHeight: 64, resize: "none" }} placeholder="发色、瞳色、身形、气质、特征…" value={appearance} maxLength={140} onChange={(e) => setAppearance(e.target.value)} />
+            <textarea style={{ ...field, minHeight: 120, resize: "vertical" }} placeholder="发色、瞳色、身形、气质、特征…" value={appearance} maxLength={300} onChange={(e) => setAppearance(e.target.value)} />
           </div>
 
           <div>
             <div style={label}>性格 / 设定</div>
-            <textarea style={{ ...field, minHeight: 84, resize: "none" }} placeholder="TA 是个怎样的人？性格、口头禅、立场…" value={persona} maxLength={200} onChange={(e) => setPersona(e.target.value)} />
+            <textarea style={{ ...field, minHeight: 150, resize: "vertical" }} placeholder="TA 是个怎样的人？性格、口头禅、立场…" value={persona} maxLength={400} onChange={(e) => setPersona(e.target.value)} />
           </div>
 
           <div>
