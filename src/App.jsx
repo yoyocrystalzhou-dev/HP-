@@ -53,7 +53,7 @@ import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, 
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
-import { CornerFlourish, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
+import { CornerFlourish, DAY_BG, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -104,8 +104,9 @@ export default function App() {
   const [sessions,        setSessions,        sessReady] = usePersist("sessions",        {});
   const [activeProjectId, setActiveProjectId, apidReady] = usePersist("activeProjectId", null);
   const [themeMode,       setThemeMode,       themeReady] = usePersist("themeMode",       "dark");
+  const [hpUiMode,        setHpUiMode,        hpUiReady] = usePersist("hpUiMode",        "day");
 
-  const ready = cfgReady && projReady && sessReady && apidReady && themeReady;
+  const ready = cfgReady && projReady && sessReady && apidReady && themeReady && hpUiReady;
 
   // Apply the active palette in place, then bump a nonce to re-render the tree
   // so every inline style re-reads the mutated `T`. (See theme.js.)
@@ -204,6 +205,55 @@ export default function App() {
   const currentCalendarMoment = HP_KIOSK && activeMode === "world"
     ? calendarMoment({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
     : null;
+  const hpTone = hpUiMode === "night" ? "night" : "day";
+  const hpIsNight = hpTone === "night";
+  const hpUi = hpIsNight
+    ? {
+        bg: NIGHT_BG,
+        chromeBg: "rgba(10,11,18,0.55)",
+        chromeText: V.ink,
+        chromeMuted: V.muted,
+        line: V.lineSoft,
+        controlBg: V.softControl,
+        emptyText: "rgba(243,233,210,0.55)",
+        calendarBg: "rgba(255,250,226,0.055)",
+        calendarChoiceBg: "rgba(255,250,226,0.065)",
+        calendarText: V.ink,
+        calendarMuted: V.muted,
+        calendarGold: V.gold,
+        inputBar: "rgba(9,12,18,0.74)",
+        inputPaper: "linear-gradient(180deg, rgba(239,222,181,0.96), rgba(210,185,132,0.94))",
+        inputInk: "#3a261b",
+        inputBorder: "rgba(120,72,46,0.74)",
+        flourishInk: "rgba(120,72,46,0.78)",
+        noteBg: "rgba(232,199,102,0.08)",
+        noteBorder: "rgba(232,199,102,0.28)",
+        noteText: "#d8c79a",
+        seal: V.seal,
+      }
+    : {
+        bg: DAY_BG,
+        chromeBg: "linear-gradient(180deg, rgba(255,247,222,0.82), rgba(223,199,149,0.50))",
+        chromeText: "#3b291d",
+        chromeMuted: "rgba(74,49,32,0.62)",
+        line: "rgba(113,68,43,0.30)",
+        controlBg: "rgba(255,247,222,0.42)",
+        emptyText: "rgba(58,38,27,0.62)",
+        calendarBg: "rgba(255,247,222,0.60)",
+        calendarChoiceBg: "rgba(255,247,222,0.64)",
+        calendarText: "#3b291d",
+        calendarMuted: "rgba(74,49,32,0.68)",
+        calendarGold: "#7a4c2e",
+        inputBar: "linear-gradient(180deg, rgba(191,148,82,0.10), rgba(105,66,43,0.16))",
+        inputPaper: "linear-gradient(180deg, rgba(255,240,202,0.98), rgba(226,200,145,0.96))",
+        inputInk: "#382416",
+        inputBorder: "rgba(105,62,37,0.78)",
+        flourishInk: "rgba(105,62,37,0.78)",
+        noteBg: "rgba(255,247,222,0.58)",
+        noteBorder: "rgba(105,62,37,0.24)",
+        noteText: "#5c351f",
+        seal: "radial-gradient(circle at 35% 30%, #9d5b3a, #75351f 52%, #3c1d14 100%)",
+      };
 
   const worldChatList = worldChatsOf(sessions, activeProject);
   const charChatList  = characterChatsOf(sessions, scopeChar);
@@ -1504,10 +1554,10 @@ ${transcriptLines(chunk)}`;
       };
 
   return (
-    <div style={{ display: "flex", gap: isMobile ? 0 : 14, height: "100dvh", width: "100%", overflow: "hidden", background: HP_KIOSK ? NIGHT_BG : V.bg, color: V.ink, position: "relative", padding: isMobile ? 0 : 16 }}>
+    <div style={{ display: "flex", gap: isMobile ? 0 : 14, height: "100dvh", width: "100%", overflow: "hidden", background: HP_KIOSK ? hpUi.bg : V.bg, color: HP_KIOSK ? hpUi.chromeText : V.ink, position: "relative", padding: isMobile ? 0 : 16 }}>
 
       {/* HP 专项：星尘背景 */}
-      {HP_KIOSK && <Starfield count={70} />}
+      {HP_KIOSK && <Starfield count={70} tone={hpTone} />}
 
       {/* Mobile drawer backdrop */}
       {isMobile && panel && (
@@ -1633,15 +1683,15 @@ ${transcriptLines(chunk)}`;
 
       {/* ════ HP 专项：玩家养成数值面板（桌面左侧栏）════ */}
       {HP_KIOSK && !isMobile && activeMode === "world" && player?.stats && (
-        <StatusBar player={player} variant="rail" favorList={favorList} houseCup={houseCup} onRestart={restartGame}
+        <StatusBar player={player} variant="rail" uiMode={hpTone} favorList={favorList} houseCup={houseCup} onRestart={restartGame}
           ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => setOcCreatorOpen(true)} onRemoveOc={removeOc} />
       )}
 
       {/* 移动端：数值底部抽屉 */}
       {HP_KIOSK && isMobile && statsOpen && player?.stats && (
         <div onClick={() => setStatsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "82vh", overflow: "auto", background: "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTop: "1px solid rgba(232,199,102,0.3)", boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}>
-            <StatusBar player={player} variant="sheet" onClose={() => setStatsOpen(false)} favorList={favorList} houseCup={houseCup} onRestart={restartGame}
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "82vh", overflow: "auto", background: hpIsNight ? "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))" : "linear-gradient(180deg, rgba(255,241,207,0.98), rgba(222,197,143,0.99))", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTop: `1px solid ${hpUi.line}`, boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}>
+            <StatusBar player={player} variant="sheet" uiMode={hpTone} onClose={() => setStatsOpen(false)} favorList={favorList} houseCup={houseCup} onRestart={restartGame}
               ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => { setStatsOpen(false); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
           </div>
         </div>
@@ -1662,12 +1712,12 @@ ${transcriptLines(chunk)}`;
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative", zIndex: 1, border: isMobile || HP_KIOSK ? "none" : `1px solid ${V.line}`, borderRadius: isMobile ? 0 : 20, background: HP_KIOSK ? "transparent" : V.frame, boxShadow: isMobile || HP_KIOSK ? "none" : "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" }}>
 
         {/* Header */}
-        <div style={{ height: HP_KIOSK && isMobile ? 78 : isMobile ? 56 : 60, borderBottom: `1px solid ${V.lineSoft}`, background: HP_KIOSK ? "rgba(10,11,18,0.55)" : V.headerBar, backdropFilter: HP_KIOSK ? "blur(8px)" : undefined, display: "flex", alignItems: "center", alignContent: HP_KIOSK && isMobile ? "center" : undefined, flexWrap: HP_KIOSK && isMobile ? "wrap" : "nowrap", padding: HP_KIOSK && isMobile ? "8px 12px 7px" : "0 14px", gap: HP_KIOSK && isMobile ? "5px 8px" : 12, flexShrink: 0 }}>
+        <div style={{ height: HP_KIOSK && isMobile ? 78 : isMobile ? 56 : 60, borderBottom: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.chromeBg : V.headerBar, backdropFilter: HP_KIOSK ? "blur(8px)" : undefined, display: "flex", alignItems: "center", alignContent: HP_KIOSK && isMobile ? "center" : undefined, flexWrap: HP_KIOSK && isMobile ? "wrap" : "nowrap", padding: HP_KIOSK && isMobile ? "8px 12px 7px" : "0 14px", gap: HP_KIOSK && isMobile ? "5px 8px" : 12, flexShrink: 0 }}>
           <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 7, overflow: "hidden", order: HP_KIOSK && isMobile ? 1 : 0 }}>
             <button
               onClick={() => { setHpHome(true); setPanel(null); }}
               title="项目列表"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, border: `1px solid ${V.lineSoft}`, borderRadius: 13, background: V.softControl, color: V.gold, cursor: "pointer", flexShrink: 0 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, border: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, borderRadius: 13, background: HP_KIOSK ? hpUi.controlBg : V.softControl, color: HP_KIOSK ? hpUi.calendarGold : V.gold, cursor: "pointer", flexShrink: 0 }}
             >
               <I.Back />
             </button>
@@ -1711,27 +1761,27 @@ ${transcriptLines(chunk)}`;
                   alignItems: "center",
                   gap: isMobile ? 7 : 11,
                   padding: isMobile ? "3px 6px" : "5px 10px",
-                  color: V.ink,
+                  color: hpUi.chromeText,
                 }}
               >
-                <span style={{ height: 1, background: `linear-gradient(90deg, transparent, ${V.line})`, position: "relative" }}>
-                  <span style={{ position: "absolute", right: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: V.gold, opacity: 0.75 }} />
+                <span style={{ height: 1, background: `linear-gradient(90deg, transparent, ${hpUi.line})`, position: "relative" }}>
+                  <span style={{ position: "absolute", right: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: hpUi.calendarGold, opacity: 0.75 }} />
                 </span>
                 <span style={{ minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 2px" }}>
-                  <span style={{ color: V.gold, display: "flex", opacity: 0.86, flexShrink: 0 }}><I.Calendar /></span>
+                  <span style={{ color: hpUi.calendarGold, display: "flex", opacity: 0.86, flexShrink: 0 }}><I.Calendar /></span>
                   <span style={{ minWidth: 0, display: "flex", flexWrap: isMobile ? "wrap" : "nowrap", alignItems: "baseline", justifyContent: "center", gap: "2px 7px", textAlign: "center" }}>
-                    <span style={{ fontFamily: V.serif, fontSize: isMobile ? 13 : 14, fontWeight: 800, color: V.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap", lineHeight: 1.2 }}>
+                    <span style={{ fontFamily: V.serif, fontSize: isMobile ? 13 : 14, fontWeight: 800, color: hpUi.chromeText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap", lineHeight: 1.2 }}>
                       {activeProject.currentTimeLabel || "未设定时间"}
                     </span>
                     {currentCanonBeat && phaseName(currentCanonBeat) && (
-                      <span style={{ color: V.muted, fontSize: isMobile ? 10.5 : 11.5, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5 }}>
+                      <span style={{ color: hpUi.chromeMuted, fontSize: isMobile ? 10.5 : 11.5, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5 }}>
                         {phaseName(currentCanonBeat)}
                       </span>
                     )}
                   </span>
                 </span>
-                <span style={{ height: 1, background: `linear-gradient(90deg, ${V.line}, transparent)`, position: "relative" }}>
-                  <span style={{ position: "absolute", left: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: V.gold, opacity: 0.75 }} />
+                <span style={{ height: 1, background: `linear-gradient(90deg, ${hpUi.line}, transparent)`, position: "relative" }}>
+                  <span style={{ position: "absolute", left: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: hpUi.calendarGold, opacity: 0.75 }} />
                 </span>
               </div>
             </div>
@@ -1763,7 +1813,7 @@ ${transcriptLines(chunk)}`;
               <button
                 onClick={() => setStatsOpen(true)}
                 title="养成数值"
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 11px", border: `1px solid ${V.lineSoft}`, borderRadius: 999, background: V.softControl, color: V.ink, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 11px", border: `1px solid ${hpUi.line}`, borderRadius: 999, background: hpUi.controlBg, color: hpUi.chromeText, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
               >
                 <I.Book />
                 <span>状态</span>
@@ -1771,9 +1821,18 @@ ${transcriptLines(chunk)}`;
             )}
             {HP_KIOSK && (
               <button
+                onClick={() => setHpUiMode((mode) => (mode === "night" ? "day" : "night"))}
+                title="切换日夜界面"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${hpUi.line}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : hpUi.controlBg, color: hpUi.chromeMuted, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: V.serif, flexShrink: 0, letterSpacing: 0.5 }}
+              >
+                {hpIsNight ? "夜" : "日"}
+              </button>
+            )}
+            {HP_KIOSK && (
+              <button
                 onClick={() => setPanel("chars")}
                 title="主控人设"
-                style={{ display: "flex", alignItems: "center", gap: isMobile ? 0 : 5, justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                style={{ display: "flex", alignItems: "center", gap: isMobile ? 0 : 5, justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${hpUi.line}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : hpUi.controlBg, color: hpUi.chromeMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
               >
                 <I.User />
                 {!isMobile && <span>人设</span>}
@@ -1783,7 +1842,7 @@ ${transcriptLines(chunk)}`;
               <button
                 onClick={() => setPanel("settings")}
                 title="配置（API Key）"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${V.lineSoft}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : V.softControl, color: V.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${hpUi.line}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : hpUi.controlBg, color: hpUi.chromeMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
               >
                 <I.Settings />
               </button>
@@ -1815,7 +1874,7 @@ ${transcriptLines(chunk)}`;
         <div style={{ flex: 1, overflow: "auto", background: HP_KIOSK ? "transparent" : V.chatBackdrop }}>
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: isMobile ? "20px 10px 24px" : "34px 26px 38px" }}>
           {messages.length === 0 && HP_KIOSK && (
-            <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: "rgba(243,233,210,0.55)", fontSize: 14, lineHeight: 1.7 }}>
+            <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: hpUi.emptyText, fontSize: 14, lineHeight: 1.7 }}>
               {config.apiKey ? "在下方描述你的行动，开启 1991 学年。" : "先在右上角配置 API Key。"}
             </div>
           )}
@@ -1839,9 +1898,9 @@ ${transcriptLines(chunk)}`;
                       maxWidth: "86%",
                       padding: "6px 13px",
                       borderRadius: 999,
-                      background: "rgba(232,199,102,0.07)",
-                      border: "1px solid rgba(232,199,102,0.22)",
-                      color: "#d8c79a",
+                      background: hpUi.noteBg,
+                      border: `1px solid ${hpUi.noteBorder}`,
+                      color: hpUi.noteText,
                       fontSize: 12,
                       fontWeight: 700,
                       textAlign: "center",
@@ -1852,7 +1911,7 @@ ${transcriptLines(chunk)}`;
                   </div>
                   {m.roll && (
                     <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
-                      <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: "rgba(232,199,102,0.08)", border: "1px solid rgba(232,199,102,0.28)", color: "#d8c79a", fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
+                      <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: hpUi.noteBg, border: `1px solid ${hpUi.noteBorder}`, color: hpUi.noteText, fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
                         {m.roll}
                       </div>
                     </div>
@@ -1964,7 +2023,7 @@ ${transcriptLines(chunk)}`;
                   </article>
                   {m.roll && (
                     <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
-                      <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: "rgba(232,199,102,0.08)", border: "1px solid rgba(232,199,102,0.28)", color: "#d8c79a", fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
+                      <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: hpUi.noteBg, border: `1px solid ${hpUi.noteBorder}`, color: hpUi.noteText, fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
                         {m.roll}
                       </div>
                     </div>
@@ -2079,17 +2138,17 @@ ${transcriptLines(chunk)}`;
         )}
 
         {/* Input bar */}
-        <div style={{ borderTop: `1px solid ${V.lineSoft}`, background: V.inputBar, padding: isMobile ? "8px 10px calc(10px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
+        <div style={{ borderTop: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.inputBar : V.inputBar, padding: isMobile ? "8px 10px calc(10px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto" }}>
           {HP_KIOSK && activeMode === "world" && currentCalendarMoment && !input.trim() && (
             <div
               style={{
                 marginBottom: calendarOpen ? 8 : 6,
-                border: `1px solid ${V.lineSoft}`,
+                border: `1px solid ${hpUi.line}`,
                 borderRadius: 13,
-                background: "rgba(255,250,226,0.055)",
+                background: hpUi.calendarBg,
                 padding: calendarOpen ? "9px 10px" : "7px 9px",
-                boxShadow: "0 10px 22px rgba(0,0,0,0.12)",
+                boxShadow: hpIsNight ? "0 10px 22px rgba(0,0,0,0.12)" : "0 10px 22px rgba(89,54,32,0.10)",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: calendarOpen ? 6 : 0 }}>
@@ -2105,24 +2164,24 @@ ${transcriptLines(chunk)}`;
                     padding: 0,
                     border: "none",
                     background: "transparent",
-                    color: V.ink,
+                    color: hpUi.calendarText,
                     fontFamily: "inherit",
                     textAlign: "left",
                     cursor: "pointer",
                   }}
                 >
-                  <span style={{ color: V.gold, fontSize: 13, transform: calendarOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+                  <span style={{ color: hpUi.calendarGold, fontSize: 13, transform: calendarOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
                   <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontWeight: 800, lineHeight: 1.2 }}>
                     {currentCalendarMoment.title}
                   </span>
                 </button>
-                <div style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 800, color: V.gold, opacity: 0.9 }}>
+                <div style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 800, color: hpUi.calendarGold, opacity: 0.9 }}>
                   {currentCalendarMoment.periodLabel || scenePeriod.label}
                 </div>
               </div>
               {calendarOpen && (
                 <>
-                  <div style={{ marginBottom: 7, fontSize: 11, lineHeight: 1.45, color: V.muted }}>
+                  <div style={{ marginBottom: 7, fontSize: 11, lineHeight: 1.45, color: hpUi.calendarMuted }}>
                     {currentCalendarMoment.note}
                   </div>
                   <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
@@ -2138,9 +2197,9 @@ ${transcriptLines(chunk)}`;
                           minHeight: 28,
                           padding: "0 10px",
                           borderRadius: 999,
-                          border: `1px solid ${V.lineSoft}`,
-                          background: "rgba(255,250,226,0.065)",
-                          color: loading ? V.faint : V.ink,
+                          border: `1px solid ${hpUi.line}`,
+                          background: hpUi.calendarChoiceBg,
+                          color: loading ? V.faint : hpUi.calendarText,
                           fontSize: 11.5,
                           fontWeight: 700,
                           fontFamily: "inherit",
@@ -2161,25 +2220,25 @@ ${transcriptLines(chunk)}`;
             display: "flex",
             alignItems: "flex-end",
             gap: 8,
-            border: HP_KIOSK ? "1px solid rgba(120,72,46,0.74)" : `1px solid ${V.lineSoft}`,
+            border: HP_KIOSK ? `1px solid ${hpUi.inputBorder}` : `1px solid ${V.lineSoft}`,
             borderRadius: HP_KIOSK ? 12 : 16,
             padding: isMobile ? "8px 9px 8px 11px" : "9px 10px 9px 13px",
             background: HP_KIOSK
-              ? "linear-gradient(180deg, rgba(239,222,181,0.96), rgba(210,185,132,0.94))"
+              ? hpUi.inputPaper
               : V.inputField,
-            boxShadow: HP_KIOSK ? "0 14px 34px rgba(0,0,0,0.28), inset 0 0 0 4px rgba(255,246,219,0.18)" : undefined,
+            boxShadow: HP_KIOSK ? (hpIsNight ? "0 14px 34px rgba(0,0,0,0.28), inset 0 0 0 4px rgba(255,246,219,0.18)" : "0 12px 28px rgba(89,54,32,0.18), inset 0 0 0 4px rgba(255,246,219,0.24)") : undefined,
             overflow: "hidden",
           }}>
             {HP_KIOSK && (
               <>
-                <CornerFlourish pos="tl" color="rgba(120,72,46,0.78)" size={22} />
-                <CornerFlourish pos="tr" color="rgba(120,72,46,0.78)" size={22} />
-                <CornerFlourish pos="br" color="rgba(120,72,46,0.78)" size={22} />
-                <CornerFlourish pos="bl" color="rgba(120,72,46,0.78)" size={22} />
+                <CornerFlourish pos="tl" color={hpUi.flourishInk} size={22} />
+                <CornerFlourish pos="tr" color={hpUi.flourishInk} size={22} />
+                <CornerFlourish pos="br" color={hpUi.flourishInk} size={22} />
+                <CornerFlourish pos="bl" color={hpUi.flourishInk} size={22} />
               </>
             )}
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => handleFiles(Array.from(e.target.files))} />
-            <button onClick={() => fileRef.current?.click()} style={{ position: "relative", zIndex: 1, background: "none", border: "none", cursor: "pointer", color: HP_KIOSK ? "rgba(94,48,38,0.8)" : V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
+            <button onClick={() => fileRef.current?.click()} style={{ position: "relative", zIndex: 1, background: "none", border: "none", cursor: "pointer", color: HP_KIOSK ? hpUi.flourishInk : V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
               <I.Attach />
             </button>
             <textarea
@@ -2189,14 +2248,14 @@ ${transcriptLines(chunk)}`;
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
               placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
               rows={1}
-              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? "#3a261b" : V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
+              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
             />
             <button
               onClick={() => send()}
               disabled={loading || (!input.trim() && !attachments.length)}
               style={{
                 width: isMobile ? 34 : 38, height: isMobile ? 34 : 38, borderRadius: isMobile ? 14 : 16, border: `1px solid ${V.line}`,
-                background: loading || (!input.trim() && !attachments.length) ? V.softControl : V.seal,
+                background: loading || (!input.trim() && !attachments.length) ? hpUi.controlBg : hpUi.seal,
                 color:      loading || (!input.trim() && !attachments.length) ? V.faint : "#f6e4ad",
                 cursor:     loading || (!input.trim() && !attachments.length) ? "not-allowed" : "pointer",
                 position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center",
@@ -2210,7 +2269,7 @@ ${transcriptLines(chunk)}`;
             </button>
           </div>
           {!isMobile && (
-            <div style={{ fontSize: 11, color: V.faint, marginTop: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: HP_KIOSK ? hpUi.chromeMuted : V.faint, marginTop: 6, textAlign: "center" }}>
               {activeMode === "world" ? "世界聊天 · 旁白推进，可扮演所有角色" : `角色聊天 · 与 ${activeChar.name} 一对一`} · 共享世界状态，不共享聊天记录
             </div>
           )}

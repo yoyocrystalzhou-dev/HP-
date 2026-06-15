@@ -17,8 +17,15 @@ export const NIGHT_BG =
   "radial-gradient(90% 50% at 85% 12%, rgba(60,80,140,0.18), transparent 60%)," +
   "linear-gradient(180deg, #0a0b12 0%, #0d1018 45%, #070709 100%)";
 
+export const DAY_BG =
+  "radial-gradient(95% 52% at 50% -8%, rgba(255,231,162,0.56), transparent 58%)," +
+  "radial-gradient(72% 46% at 8% 16%, rgba(191,125,62,0.22), transparent 62%)," +
+  "radial-gradient(76% 50% at 92% 20%, rgba(121,151,168,0.20), transparent 64%)," +
+  "linear-gradient(180deg, #f5ead2 0%, #dfc99c 48%, #b99760 100%)";
+
 /** 碎星尘层（柔光圆点 + 少量亮星），铺在暗底之上、内容之下。 */
-export function Starfield({ count = 110 }) {
+export function Starfield({ count = 110, tone = "night" }) {
+  const isDay = tone === "day";
   const dust = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => ({
@@ -45,12 +52,17 @@ export function Starfield({ count = 110 }) {
       {dust.map((s) => (
         <span key={s.id} style={{
           position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size,
-          borderRadius: "50%", background: s.gold ? "rgba(232,199,102,0.9)" : "rgba(226,232,245,0.85)",
-          boxShadow: s.gold ? "0 0 3px rgba(232,199,102,0.7)" : "0 0 3px rgba(220,230,255,0.5)",
+          borderRadius: "50%",
+          background: isDay
+            ? (s.gold ? "rgba(124,75,36,0.34)" : "rgba(255,248,222,0.58)")
+            : (s.gold ? "rgba(232,199,102,0.9)" : "rgba(226,232,245,0.85)"),
+          boxShadow: isDay
+            ? (s.gold ? "0 0 5px rgba(124,75,36,0.18)" : "0 0 5px rgba(255,248,222,0.28)")
+            : (s.gold ? "0 0 3px rgba(232,199,102,0.7)" : "0 0 3px rgba(220,230,255,0.5)"),
           animation: `hpDust ${s.dur}s ease-in-out ${s.delay}s infinite`,
         }} />
       ))}
-      {glints.map((s) => (
+      {!isDay && glints.map((s) => (
         <span key={`g${s.id}`} style={{
           position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, borderRadius: "50%",
           background: "radial-gradient(circle, rgba(255,244,214,0.95), rgba(232,199,102,0.35) 55%, transparent 72%)",
