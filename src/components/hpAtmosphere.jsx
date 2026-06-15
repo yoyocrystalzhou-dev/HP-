@@ -18,10 +18,11 @@ export const NIGHT_BG =
   "linear-gradient(180deg, #0a0b12 0%, #0d1018 45%, #070709 100%)";
 
 export const DAY_BG =
-  "radial-gradient(95% 52% at 50% -8%, rgba(255,231,162,0.56), transparent 58%)," +
-  "radial-gradient(72% 46% at 8% 16%, rgba(191,125,62,0.22), transparent 62%)," +
-  "radial-gradient(76% 50% at 92% 20%, rgba(121,151,168,0.20), transparent 64%)," +
-  "linear-gradient(180deg, #f5ead2 0%, #dfc99c 48%, #b99760 100%)";
+  "radial-gradient(80% 42% at 50% -10%, rgba(221,205,174,0.58), transparent 62%)," +
+  "radial-gradient(72% 46% at 8% 14%, rgba(171,143,102,0.15), transparent 66%)," +
+  "radial-gradient(76% 50% at 92% 20%, rgba(196,184,161,0.18), transparent 66%)," +
+  "repeating-linear-gradient(0deg, rgba(116,91,61,0.035) 0 1px, transparent 1px 22px)," +
+  "linear-gradient(180deg, #fbfaf5 0%, #f0eadf 52%, #ddd1bd 100%)";
 
 /** 碎星尘层（柔光圆点 + 少量亮星），铺在暗底之上、内容之下。 */
 export function Starfield({ count = 110, tone = "night" }) {
@@ -54,10 +55,10 @@ export function Starfield({ count = 110, tone = "night" }) {
           position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size,
           borderRadius: "50%",
           background: isDay
-            ? (s.gold ? "rgba(124,75,36,0.34)" : "rgba(255,248,222,0.58)")
+            ? (s.gold ? "rgba(152,128,93,0.22)" : "rgba(255,255,250,0.54)")
             : (s.gold ? "rgba(232,199,102,0.9)" : "rgba(226,232,245,0.85)"),
           boxShadow: isDay
-            ? (s.gold ? "0 0 5px rgba(124,75,36,0.18)" : "0 0 5px rgba(255,248,222,0.28)")
+            ? (s.gold ? "0 0 5px rgba(152,128,93,0.12)" : "0 0 5px rgba(255,255,250,0.24)")
             : (s.gold ? "0 0 3px rgba(232,199,102,0.7)" : "0 0 3px rgba(220,230,255,0.5)"),
           animation: `hpDust ${s.dur}s ease-in-out ${s.delay}s infinite`,
         }} />

@@ -211,6 +211,7 @@ export default function App() {
     ? {
         bg: NIGHT_BG,
         chromeBg: "rgba(10,11,18,0.55)",
+        stageBg: "radial-gradient(70% 80% at 50% 18%, rgba(217,195,139,0.045), transparent 72%)",
         chromeText: V.ink,
         chromeMuted: V.muted,
         line: V.lineSoft,
@@ -222,10 +223,17 @@ export default function App() {
         calendarMuted: V.muted,
         calendarGold: V.gold,
         inputBar: "rgba(9,12,18,0.74)",
-        inputPaper: "linear-gradient(180deg, rgba(239,222,181,0.96), rgba(210,185,132,0.94))",
-        inputInk: "#3a261b",
-        inputBorder: "rgba(120,72,46,0.74)",
-        flourishInk: "rgba(120,72,46,0.78)",
+        inputPaper: "linear-gradient(180deg, rgba(20,23,32,0.96), rgba(9,11,17,0.97))",
+        inputInk: "#f2dfaa",
+        inputBorder: "rgba(217,195,139,0.42)",
+        flourishInk: "rgba(217,195,139,0.62)",
+        cardBg: "linear-gradient(180deg, rgba(25,28,38,0.96), rgba(12,14,22,0.97)), repeating-linear-gradient(0deg, rgba(217,195,139,0.035) 0 1px, transparent 1px 24px)",
+        cardText: "#f1e7ce",
+        cardInkUser: "rgba(217,195,139,0.78)",
+        cardInkNarrator: "rgba(190,82,76,0.78)",
+        cardShadow: "0 18px 46px rgba(0,0,0,0.52), inset 0 0 0 5px rgba(217,195,139,0.035)",
+        actionBg: "rgba(217,195,139,0.10)",
+        actionText: "rgba(241,231,206,0.76)",
         noteBg: "rgba(232,199,102,0.08)",
         noteBorder: "rgba(232,199,102,0.28)",
         noteText: "#d8c79a",
@@ -233,26 +241,36 @@ export default function App() {
       }
     : {
         bg: DAY_BG,
-        chromeBg: "linear-gradient(180deg, rgba(255,247,222,0.82), rgba(223,199,149,0.50))",
-        chromeText: "#3b291d",
-        chromeMuted: "rgba(74,49,32,0.62)",
-        line: "rgba(113,68,43,0.30)",
-        controlBg: "rgba(255,247,222,0.42)",
-        emptyText: "rgba(58,38,27,0.62)",
-        calendarBg: "rgba(255,247,222,0.60)",
-        calendarChoiceBg: "rgba(255,247,222,0.64)",
-        calendarText: "#3b291d",
-        calendarMuted: "rgba(74,49,32,0.68)",
-        calendarGold: "#7a4c2e",
-        inputBar: "linear-gradient(180deg, rgba(191,148,82,0.10), rgba(105,66,43,0.16))",
-        inputPaper: "linear-gradient(180deg, rgba(255,240,202,0.98), rgba(226,200,145,0.96))",
-        inputInk: "#382416",
-        inputBorder: "rgba(105,62,37,0.78)",
-        flourishInk: "rgba(105,62,37,0.78)",
-        noteBg: "rgba(255,247,222,0.58)",
-        noteBorder: "rgba(105,62,37,0.24)",
-        noteText: "#5c351f",
-        seal: "radial-gradient(circle at 35% 30%, #9d5b3a, #75351f 52%, #3c1d14 100%)",
+        chromeBg: "linear-gradient(180deg, rgba(255,255,250,0.82), rgba(239,232,218,0.66))",
+        stageBg:
+          "radial-gradient(70% 76% at 50% 18%, rgba(255,255,250,0.50), transparent 72%)," +
+          "linear-gradient(90deg, rgba(255,255,250,0.16), transparent 14%, transparent 86%, rgba(255,255,250,0.16))",
+        chromeText: "#5b4b3a",
+        chromeMuted: "rgba(92,76,58,0.58)",
+        line: "rgba(171,151,122,0.34)",
+        controlBg: "rgba(255,255,250,0.56)",
+        emptyText: "rgba(92,76,58,0.58)",
+        calendarBg: "rgba(255,255,250,0.68)",
+        calendarChoiceBg: "rgba(255,255,250,0.76)",
+        calendarText: "#5b4b3a",
+        calendarMuted: "rgba(92,76,58,0.62)",
+        calendarGold: "#9d8a6c",
+        inputBar: "linear-gradient(180deg, rgba(255,255,250,0.40), rgba(213,201,181,0.22))",
+        inputPaper: "linear-gradient(180deg, rgba(255,255,250,0.98), rgba(234,226,211,0.96))",
+        inputInk: "#5a4733",
+        inputBorder: "rgba(171,151,122,0.64)",
+        flourishInk: "rgba(157,138,108,0.78)",
+        cardBg: "linear-gradient(180deg, rgba(255,255,250,0.93), rgba(236,228,213,0.90)), repeating-linear-gradient(0deg, rgba(157,138,108,0.045) 0 1px, transparent 1px 24px)",
+        cardText: "#6a5844",
+        cardInkUser: "rgba(157,138,108,0.86)",
+        cardInkNarrator: "rgba(142,122,94,0.88)",
+        cardShadow: "0 18px 42px rgba(93,76,54,0.20), inset 0 0 0 5px rgba(255,255,250,0.28)",
+        actionBg: "rgba(255,255,250,0.52)",
+        actionText: "rgba(92,76,58,0.66)",
+        noteBg: "rgba(255,255,250,0.68)",
+        noteBorder: "rgba(171,151,122,0.34)",
+        noteText: "#7a694f",
+        seal: "radial-gradient(circle at 35% 30%, #bba98a, #8f7652 52%, #5e4a34 100%)",
       };
 
   const worldChatList = worldChatsOf(sessions, activeProject);
@@ -1871,7 +1889,7 @@ ${transcriptLines(chunk)}`;
         </div>
 
         {/* Messages */}
-        <div style={{ flex: 1, overflow: "auto", background: HP_KIOSK ? "transparent" : V.chatBackdrop }}>
+        <div style={{ flex: 1, overflow: "auto", background: HP_KIOSK ? hpUi.stageBg : V.chatBackdrop }}>
           <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: isMobile ? "20px 10px 24px" : "34px 26px 38px" }}>
           {messages.length === 0 && HP_KIOSK && (
             <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: hpUi.emptyText, fontSize: 14, lineHeight: 1.7 }}>
@@ -1924,10 +1942,10 @@ ${transcriptLines(chunk)}`;
               height: 28,
               display: "grid",
               placeItems: "center",
-              border: "1px solid rgba(92,73,42,0.18)",
+              border: `1px solid ${HP_KIOSK ? hpUi.line : "rgba(92,73,42,0.18)"}`,
               borderRadius: "50%",
-              background: "rgba(255,250,226,0.16)",
-              color: disabled ? "rgba(97,75,47,0.3)" : "rgba(97,75,47,0.72)",
+              background: HP_KIOSK ? hpUi.actionBg : "rgba(255,250,226,0.16)",
+              color: disabled ? (HP_KIOSK ? hpUi.chromeMuted : "rgba(97,75,47,0.3)") : (HP_KIOSK ? hpUi.actionText : "rgba(97,75,47,0.72)"),
               cursor: disabled ? "not-allowed" : "pointer",
               fontSize: 11,
               fontWeight: 800,
@@ -1946,7 +1964,7 @@ ${transcriptLines(chunk)}`;
               padding: "4px 9px",
             });
             if (HP_KIOSK) {
-              const frameInk = isUser ? "rgba(120,72,46,0.88)" : "rgba(94,48,38,0.92)";
+              const frameInk = isUser ? hpUi.cardInkUser : hpUi.cardInkNarrator;
               const label = isUser ? "你" : "旁白";
               return (
                 <Fragment key={msgId}>
@@ -1965,11 +1983,9 @@ ${transcriptLines(chunk)}`;
                         padding: isMobile ? "18px 17px 16px" : "22px 24px 20px",
                         border: `1.2px solid ${frameInk}`,
                         borderRadius: isMobile ? 12 : 14,
-                        background:
-                          "linear-gradient(180deg, rgba(247,232,190,0.96), rgba(223,199,149,0.94))," +
-                          "repeating-linear-gradient(0deg, rgba(96,56,38,0.075) 0 1px, transparent 1px 24px)",
-                        color: "#3a261b",
-                        boxShadow: "0 16px 42px rgba(0,0,0,0.34), inset 0 0 0 5px rgba(255,246,219,0.22)",
+                        background: hpUi.cardBg,
+                        color: hpUi.cardText,
+                        boxShadow: hpUi.cardShadow,
                         overflow: "hidden",
                       }}
                     >
@@ -1986,7 +2002,7 @@ ${transcriptLines(chunk)}`;
                         {m.attachments?.length > 0 && (
                           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                             {m.attachments.map((a, j) => (
-                              <span key={j} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: `1px solid rgba(94,48,38,0.24)`, borderRadius: 999, padding: "1px 7px", fontSize: 11, color: "rgba(58,38,27,0.72)", background: "rgba(255,246,219,0.3)" }}>
+                              <span key={j} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: `1px solid ${hpUi.line}`, borderRadius: 999, padding: "1px 7px", fontSize: 11, color: hpUi.cardText, background: hpUi.actionBg }}>
                                 附件：{a.name}
                               </span>
                             ))}
@@ -1997,7 +2013,7 @@ ${transcriptLines(chunk)}`;
                             value={editDraft}
                             onChange={(e) => setEditDraft(e.target.value)}
                             rows={Math.min(8, Math.max(3, editDraft.split("\n").length))}
-                            style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(94,48,38,0.32)", borderRadius: 10, background: "rgba(255,246,219,0.42)", color: "#3a261b", fontSize: 14, fontFamily: "inherit", lineHeight: 1.65, padding: "9px 11px", resize: "vertical", outline: "none" }}
+                            style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${hpUi.line}`, borderRadius: 10, background: hpUi.inputPaper, color: hpUi.inputInk, fontSize: 14, fontFamily: "inherit", lineHeight: 1.65, padding: "9px 11px", resize: "vertical", outline: "none" }}
                           />
                         ) : (
                           <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: isUser ? 14 : 14.5, lineHeight: isMobile ? 1.72 : 1.82, fontFamily: V.serif }}>
@@ -2013,7 +2029,7 @@ ${transcriptLines(chunk)}`;
                         <button onClick={() => { setEditingMsgId(null); setEditDraft(""); }} style={editButton()}>取消</button>
                       </div>
                     ) : (
-                      <div style={{ display: "flex", gap: 5, marginTop: 7, justifyContent: "center", opacity: 0.42 }}>
+                      <div style={{ display: "flex", gap: 5, marginTop: 7, justifyContent: "center", opacity: hpIsNight ? 0.62 : 0.46 }}>
                         <button title="Regenerate" onClick={() => regenerateFrom(msgId)} disabled={loading || m.streaming} style={actionButton(loading || m.streaming)}>↻</button>
                         <button title="Copy" onClick={() => copyMessage(m)} disabled={m.streaming} style={actionButton(m.streaming)}>⧉</button>
                         <button title="Edit" onClick={() => startEditMessage(m, msgId)} disabled={loading || m.streaming || !isUser} style={actionButton(loading || m.streaming || !isUser)}>✎</button>
