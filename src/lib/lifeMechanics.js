@@ -135,10 +135,7 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
   const raw = compact(text);
   if (!raw || parseActionCommand(raw)) return null;
   const key = labelSortKey(currentTimeLabel);
-
-  // 开学前采购序章（1991-09-01 之前）：还没有课堂 / 检定场景，不推断任何机制指令，
-  // 避免「买魔药课的器材」这类采购语句被误判成课堂表现等检定。
-  if (key && key < 19910901) return null;
+  const beforeTerm = !!key && key < 19910901; // 开学前（采购 + 备课阶段）：没有课堂
 
   if (has(raw, ["睡觉", "睡下", "入睡", "补眠", "回去睡", "直接睡", "回去休息"]) || /(?:^|[，。！？；、])(?:我)?(?:想|要|准备)?休息(?:一下|一会儿|了|$)/.test(raw)) {
     return { command: "休息", action: ACTIONS.休息, target: "", inferred: true };
@@ -190,7 +187,7 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
   const attendsClass =
     /上(?:魔咒|魔药|变形术|草药学?|黑魔法防御术|防御术|魔法史|飞行|天文学?|占卜学?|算术占卜|保护神奇生物|古代如尼文|麻瓜研究)课/.test(raw) ||
     has(raw, ["按课表上课", "去上课", "上课", "课堂表现", "回答问题", "举手回答", "被点名", "课堂展示", "课堂示范", "随堂测验", "随堂小测"]);
-  if (attendsClass) {
+  if (attendsClass && !beforeTerm) { // 开学前没有课堂，不触发课堂检定
     return withLocationGate("课堂", ACTIONS.课堂, "课堂表现", text);
   }
 

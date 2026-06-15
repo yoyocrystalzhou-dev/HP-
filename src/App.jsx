@@ -33,7 +33,7 @@ import GenerationSelect    from "./components/GenerationSelect.jsx";
 import CharacterCreator    from "./components/CharacterCreator.jsx";
 import { PRESETS, GENERATIONS } from "./presets/index.js";
 import { instantiatePreset, presetProjectId } from "./lib/loadPreset.js";
-import { currentBeat, canonAnchor, phaseName, advanceTime, labelSortKey } from "./lib/timeline.js";
+import { currentBeat, canonAnchor, phaseName, addDays, labelSortKey } from "./lib/timeline.js";
 import { initialStats, formatStatsLine, GATING_RULES, STAMINA_MAX } from "./lib/stats.js";
 import { initialCourses, formatCoursesBlock } from "./lib/courses.js";
 import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects } from "./lib/checks.js";
@@ -44,7 +44,7 @@ import {
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
-import { dayPeriod, nextDayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
+import { dayPeriod, advanceDayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
 import { formatTimetableBlock, timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
@@ -370,6 +370,7 @@ export default function App() {
       display: option.label,
       hiddenText: text,
       kind: "calendarChoice",
+      growth: option.growth || null,
       disableActions: !(option.mechanic === "课堂" || ["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label)),
       advancePeriod: !(option.nextTimeLabel || option.nextPeriodId),
     });
@@ -1170,22 +1171,17 @@ ${transcriptLines(chunk)}`;
       });
       const completedMessages = [...baseMessages, { role: "assistant", content: visibleText, id: aid, roll: rollLine || null, streaming: false }];
 
+      // HP 专项：时间按「时段」推进——一回合推进一个时段（上午→下午→晚饭后→夜晚→深夜），
+      // 走到深夜之后回到次日上午并把日期 +1。日期不再跳到下一个原著节点；原著锚点改由
+      // 当前日期落在哪个节点自然决定（见 buildSystem 的 currentCanonBeat）。玩家可在日常入口
+      // 选「快进到下一个重要日子」一次性跨过空白日子。这样玩家完全掌控节奏：可只玩一天，也可玩很多天。
       if (HP_KIOSK && activeMode === "world" && lastUserForMechanics.advancePeriod) {
         patchProject((p) => {
-          const current = p.dayPeriod || "morning";
-          const next = nextDayPeriod(current);
-          return next === current ? p : { ...p, dayPeriod: next };
-        });
-      }
-
-      // HP 专项：原著时间线自动推进（混合节奏，仅世界模式 + HP 预设）。基于 prev 状态结算，防陈旧。
-      if (activePreset && activeMode === "world" && canonTimeline.length) {
-        patchProject((p) => {
-          if (labelSortKey(p.currentTimeLabel) < 19910901) return p;
-          const adv = advanceTime(p.currentTimeLabel, canonTimeline, p.beatProgress);
-          return adv.advanced
-            ? { ...p, currentTimeLabel: adv.label, beatProgress: 0 }
-            : { ...p, beatProgress: adv.beatProgress };
+          const { period, dayRollover } = advanceDayPeriod(p.dayPeriod || "morning");
+          const label = dayRollover && labelSortKey(p.currentTimeLabel) >= 19910816
+            ? addDays(p.currentTimeLabel, 1)
+            : p.currentTimeLabel;
+          return { ...p, dayPeriod: period, currentTimeLabel: label };
         });
       }
 
@@ -1268,6 +1264,19 @@ ${transcriptLines(chunk)}`;
           }));
         }
       }
+    }
+    // HP 专项：养成型校历选项（开学前预习 / 练习等）→ 确定性数值成长，写回养成数值。
+    let growthAnchor = null;
+    const growthEntries = draft?.growth
+      ? Object.entries(draft.growth).map(([key, delta]) => ({ key, delta }))
+      : [];
+    if (growthEntries.length) {
+      rollLine = [rollLine, formatDailyGrowth(growthEntries)].filter(Boolean).join("  ·  ");
+      growthAnchor = `【本回合养成成长】${formatDailyGrowth(growthEntries).replace(/^✨\s*/, "")}。请把这次开学前的准备 / 练习自然地叙述出来，体现相应的小小进步；不要再额外加减任何数值。`;
+      patchProject((p) => {
+        const pc = p.playerCharacter || {};
+        return { ...p, playerCharacter: { ...pc, stats: applyDailyGrowth(pc.stats, growthEntries) } };
+      });
     }
     const explicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
     const naturalCmd = !explicitCmd && !disableActions && HP_KIOSK && activeMode === "world"
@@ -1396,7 +1405,7 @@ ${transcriptLines(chunk)}`;
       }
     }
 
-    const supplementalAnchor = [inventoryAnchor, cupAnchor, actionAnchor].filter(Boolean).join("\n\n");
+    const supplementalAnchor = [inventoryAnchor, cupAnchor, growthAnchor, actionAnchor].filter(Boolean).join("\n\n");
     let content;
     if (curAtts.length > 0 && config.apiType === "anthropic") {
       const parts = [];

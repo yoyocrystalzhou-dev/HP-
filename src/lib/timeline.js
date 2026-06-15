@@ -18,6 +18,15 @@ export function labelSortKey(label) {
   return y * 10000 + mo * 100 + d;
 }
 
+/** 在「YYYY年M月D日…」标签上加减天数，返回纯日期标签「YYYY年M月D日」。无法解析则原样返回。 */
+export function addDays(label, n = 1) {
+  const m = String(label || "").match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+  if (!m) return label;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
 /** 当前时间所处的原著节点：sortKey ≤ 当前时间 的最后一个节点（节点表已按 sortKey 升序）。 */
 export function currentBeat(label, nodes) {
   if (!Array.isArray(nodes) || nodes.length === 0) return null;

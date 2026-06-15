@@ -27,6 +27,30 @@ export function nextDayPeriod(id) {
   return periodOrder[Math.min(periodOrder.length - 1, Math.max(0, i) + 1)] || "morning";
 }
 
+/**
+ * 推进一个时段；走到最后一个时段（深夜）之后回到次日「上午」，并标记跨天。
+ * 返回 { period, dayRollover }。日期 +1 由调用方在 dayRollover 时处理。
+ */
+export function advanceDayPeriod(id) {
+  const i = Math.max(0, periodOrder.indexOf(id || "morning"));
+  if (i >= periodOrder.length - 1) return { period: "morning", dayRollover: true };
+  return { period: periodOrder[i + 1], dayRollover: false };
+}
+
+/** 当前日期之后的下一个校历事件节点（用于「快进到下一个重要日子」）。 */
+export function nextCalendarEvent(currentTimeLabel) {
+  const k = labelSortKey(currentTimeLabel);
+  const keys = Object.keys(HOGWARTS_CALENDAR_EVENTS).map(Number).sort((a, b) => a - b);
+  const nxt = keys.find((x) => x > k);
+  if (!nxt) return null;
+  const s = String(nxt);
+  return {
+    key: nxt,
+    label: `${s.slice(0, 4)}年${Number(s.slice(4, 6))}月${Number(s.slice(6, 8))}日`,
+    title: HOGWARTS_CALENDAR_EVENTS[nxt].title,
+  };
+}
+
 export function formatCalendarPeriodBlock(period) {
   if (!period) return "";
   return `【当前生活时间段】${period.label}：${period.instruction}。这只是生活氛围与事件池参考，不代表固定剧情。`;
@@ -39,6 +63,9 @@ const eventChoice = (label, intent, opts = {}) => choice(label, intent, opts);
 // 跨学年/跨日期推进的选项：选中后把当前日期推进到 nextTimeLabel。
 const advanceChoice = (label, intent, nextTimeLabel) => choice(label, intent, { nextTimeLabel, nextPeriodId: "morning" });
 
+// 养成型选项：选中后给予确定性的数值成长（由 App 读取 choice.growth 应用）。
+const growthChoice = (label, intent, growth) => choice(label, intent, { growth });
+
 export const HOGWARTS_CALENDAR_EVENTS = {
   19910816: {
     title: "对角巷采购",
@@ -50,8 +77,8 @@ export const HOGWARTS_CALENDAR_EVENTS = {
       eventChoice("挑选魔杖", "我想去奥利凡德魔杖店，让魔杖选择我。"),
       eventChoice("买课本材料", "我想去丽痕书店和魔药材料店采购课本、坩埚、药材和其他用品。"),
       eventChoice("继续逛逛", "我想在对角巷随便逛逛，不预设收获，只看会自然发生什么。"),
-      eventChoice("准备出发", "采购差不多结束了，我想把时间推进到开学日，前往国王十字车站。", {
-        nextTimeLabel: "1991年9月1日",
+      eventChoice("结束采购 · 回去备课", "采购差不多结束了，我想回去，利用开学前的日子做些准备。", {
+        nextTimeLabel: "1991年8月17日",
         nextPeriodId: "morning",
       }),
     ],
@@ -484,6 +511,23 @@ function shoppingMoment() {
   return calendarEvent(19910816);
 }
 
+// 开学前养成（8/17–8/31）：预习、练咒、飞行、写信等，确定性小幅成长；准备好就出发。
+function preTermMoment() {
+  return {
+    title: "开学前的日子",
+    periodLabel: "假期",
+    note: "距离开学还有些日子。你可以预习课本、练习魔咒、熟悉飞行或给家人写信——每做一件都会带来一点成长；准备好了就出发去国王十字车站。也可以直接在输入框自由写。",
+    choices: [
+      growthChoice("预习课本", "我想预习这学期的课本，为开学做准备。", { academic: 2 }),
+      growthChoice("练习魔咒", "我想偷偷练习几个基础魔咒，熟悉挥杖的手感。", { magic: 2 }),
+      growthChoice("熟悉飞行", "我想找机会熟悉一下扫帚和飞行的感觉。", { agility: 2 }),
+      growthChoice("给家人写信", "我想给家人写信，聊聊即将到来的霍格沃茨生活。", { family: 2 }),
+      growthChoice("读《一段校史》", "我想读一读《霍格沃茨，一段校史》，多了解这个魔法世界。", { academic: 1, courage: 1 }),
+      advanceChoice("准备出发 · 前往国王十字车站", "开学前的准备做得差不多了，我想出发前往国王十字车站。", "1991年9月1日"),
+    ],
+  };
+}
+
 // 暑假（7-8 月，非开学前采购序章）的通用日常入口，避免在假期里错误地套用校内课表。
 function summerMoment() {
   return {
@@ -547,12 +591,26 @@ function dailyMoment(period, currentTimeLabel = "") {
 
 export function calendarMoment({ currentTimeLabel, periodId }) {
   const k = labelSortKey(currentTimeLabel);
-  if (k && k < 19910901) return shoppingMoment();
+  if (k && k <= 19910816) return shoppingMoment();                  // 8/16 对角巷采购
+  if (k && k >= 19910817 && k < 19910901) return preTermMoment();   // 8/17–8/31 开学前养成
   const event = calendarEvent(k);
   if (event) return event;
   const month = k ? Math.floor((k % 10000) / 100) : 0;
-  if (k >= 19910901 && (month === 7 || month === 8)) return summerMoment();
-  return dailyMoment(periodId, currentTimeLabel);
+  if (k >= 19910901 && (month === 7 || month === 8)) return withFastForward(summerMoment(), currentTimeLabel);
+  return withFastForward(dailyMoment(periodId, currentTimeLabel), currentTimeLabel);
+}
+
+// 给日常 / 暑假入口追加一个「快进到下一个重要日子」选项，让玩家自行决定玩一天还是很多天。
+function withFastForward(moment, currentTimeLabel) {
+  const nextEv = nextCalendarEvent(currentTimeLabel);
+  if (!nextEv) return moment;
+  return {
+    ...moment,
+    choices: [
+      ...(moment.choices || []),
+      advanceChoice(`⏭ 快进到「${nextEv.title}」`, `日子平静地过着，我想把时间快进到下一个重要的日子（${nextEv.label} · ${nextEv.title}）。`, nextEv.label),
+    ],
+  };
 }
 
 export function buildCalendarChoiceInput(choiceItem, period, currentTimeLabel) {
