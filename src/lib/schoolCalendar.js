@@ -226,11 +226,13 @@ export function buildCalendarChoiceInput(choiceItem, period, currentTimeLabel) {
     : (period ? `当前时间段：${period.label}（${period.instruction}）。` : "");
   const t = currentTimeLabel ? `当前日期：${currentTimeLabel}。` : "";
   const schedule = beforeTerm ? "" : `校历作息：${CLASS_DAY_RULES.join(" ")}`;
+  const next = choiceItem.nextTimeLabel ? `本次选择后，当前日期应推进到：${choiceItem.nextTimeLabel}。` : "";
   return [
     "【校历安排】",
     t,
     p,
     schedule,
+    next,
     choiceItem.intent,
     "请根据校历、当前时间、地点、人物关系和已有记忆自由生成发生的事；这不是固定收益选项。"
   ].filter(Boolean).join("\n");

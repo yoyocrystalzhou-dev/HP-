@@ -228,7 +228,14 @@ export default function App() {
   const setProjectFiles = (fn) =>
     patchProject((p) => ({ ...p, files: typeof fn === "function" ? fn(p.files || []) : fn }));
 
-  const chooseCalendarOption = (option) => {
+  const chooseCalendarOption = async (option) => {
+    if (loading) return;
+    if (!activeSessionId) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
     const text = buildCalendarChoiceInput(option, scenePeriod, activeProject?.currentTimeLabel);
     if (option.nextTimeLabel || option.nextPeriodId) {
       patchProject((p) => ({
@@ -238,12 +245,12 @@ export default function App() {
         beatProgress: option.nextTimeLabel ? 0 : p.beatProgress,
       }));
     }
-    setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
-    requestAnimationFrame(() => {
-      if (!taRef.current) return;
-      taRef.current.focus();
-      taRef.current.style.height = "auto";
-      taRef.current.style.height = Math.min(taRef.current.scrollHeight, inputMaxHeight) + "px";
+    await send({
+      text: option.label,
+      display: option.label,
+      hiddenText: text,
+      kind: "calendarChoice",
+      disableActions: true,
     });
   };
 
@@ -1007,10 +1014,15 @@ ${transcriptLines(chunk)}`;
   };
 
   // ── Send ──
-  const send = async () => {
+  const send = async (draft = null) => {
     if (loading) return;
-    const text = input.trim();
-    if (!text && !attachments.length) return;
+    const text = (draft?.text ?? input).trim();
+    const hiddenText = (draft?.hiddenText ?? text).trim();
+    const displayText = draft?.display ?? text;
+    const messageKind = draft?.kind || null;
+    const disableActions = !!draft?.disableActions;
+    const curAtts = draft ? [] : [...attachments];
+    if (!hiddenText && !curAtts.length) return;
     if (!activeSessionId) return;
     if (!config.apiKey) {
       setStatus("⚠ 请先填写 API Key");
@@ -1018,11 +1030,9 @@ ${transcriptLines(chunk)}`;
       return;
     }
 
-    const curAtts = [...attachments];
-
     // HP 专项：行动指令（/练咒 …）→ 透明检定。普通对话不触发。
     let actionAnchor = null, rollLine = null;
-    const cmd = HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
+    const cmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
     if (cmd && player?.stats) {
       const stamina = Number(player.stats.stamina ?? STAMINA_MAX);
       const cost = cmd.action.cost || 10;
@@ -1126,27 +1136,30 @@ ${transcriptLines(chunk)}`;
         else if (a.type.startsWith("image/"))
           parts.push({ type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } });
       }
-      if (text) parts.push({ type: "text", text });
+      if (hiddenText) parts.push({ type: "text", text: actionAnchor ? `${hiddenText}\n\n${actionAnchor}` : hiddenText });
       content = parts;
     } else {
-      content = actionAnchor ? `${text}\n\n${actionAnchor}` : text;
+      content = actionAnchor ? `${hiddenText}\n\n${actionAnchor}` : hiddenText;
     }
 
     const userMsg = {
       id: uid(),
       role: "user", content,
-      display: text,
+      display: displayText,
+      kind: messageKind,
       roll: rollLine || null, // 检定/状态变化，渲染为独立居中状态条（不进气泡、不发给 AI）
       attachments: curAtts.map((a) => ({ name: a.name })),
     };
     const newMsgs = [...messages, userMsg];
     setMessages(newMsgs);
-    setInput("");
-    setAttachments([]);
-    if (taRef.current) taRef.current.style.height = "auto";
-    maybeAutoNameChat(activeSessionId, text);
+    if (!draft) {
+      setInput("");
+      setAttachments([]);
+      if (taRef.current) taRef.current.style.height = "auto";
+    }
+    maybeAutoNameChat(activeSessionId, displayText || text);
 
-    await generateAssistantReply(newMsgs, text, activeSessionId);
+    await generateAssistantReply(newMsgs, hiddenText || text, activeSessionId);
   };
 
   const copyMessage = async (message) => {
@@ -1203,7 +1216,10 @@ ${transcriptLines(chunk)}`;
     clearSummaryIfAffected(userIndex);
     const baseMessages = messages.slice(0, userIndex + 1).map((message) => ({ ...message, streaming: false }));
     setMessages(baseMessages);
-    await generateAssistantReply(baseMessages, messageText(baseMessages[userIndex]), activeSessionId);
+    const regenPrompt = typeof baseMessages[userIndex].content === "string"
+      ? baseMessages[userIndex].content
+      : messageText(baseMessages[userIndex]);
+    await generateAssistantReply(baseMessages, regenPrompt, activeSessionId);
   };
 
   const startEditMessage = (message, messageId) => {
@@ -1622,6 +1638,35 @@ ${transcriptLines(chunk)}`;
             const msgId = m.id || `idx-${i}`;
             const displayText = m.display || m.content;
             const isEditing = editingMsgId === msgId;
+            if (m.kind === "calendarChoice") {
+              return (
+                <Fragment key={msgId}>
+                  <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 18px" : "0 0 22px", animation: "fadeUp 0.18s ease" }}>
+                    <div style={{
+                      maxWidth: "86%",
+                      padding: "6px 13px",
+                      borderRadius: 999,
+                      background: "rgba(232,199,102,0.07)",
+                      border: "1px solid rgba(232,199,102,0.22)",
+                      color: "#d8c79a",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textAlign: "center",
+                      letterSpacing: 0.2,
+                    }}>
+                      校历安排 · {typeof displayText === "string" ? displayText : "继续日常"}
+                    </div>
+                  </div>
+                  {m.roll && (
+                    <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
+                      <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: "rgba(232,199,102,0.08)", border: "1px solid rgba(232,199,102,0.28)", color: "#d8c79a", fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
+                        {m.roll}
+                      </div>
+                    </div>
+                  )}
+                </Fragment>
+              );
+            }
             const actionButton = (disabled = false) => ({
               width: 28,
               height: 28,
