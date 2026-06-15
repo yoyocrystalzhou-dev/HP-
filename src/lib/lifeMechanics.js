@@ -136,6 +136,10 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
   if (!raw || parseActionCommand(raw)) return null;
   const key = labelSortKey(currentTimeLabel);
 
+  // 开学前采购序章（1991-09-01 之前）：还没有课堂 / 检定场景，不推断任何机制指令，
+  // 避免「买魔药课的器材」这类采购语句被误判成课堂表现等检定。
+  if (key && key < 19910901) return null;
+
   if (has(raw, ["睡觉", "睡下", "入睡", "补眠", "回去睡", "直接睡", "回去休息"]) || /(?:^|[，。！？；、])(?:我)?(?:想|要|准备)?休息(?:一下|一会儿|了|$)/.test(raw)) {
     return { command: "休息", action: ACTIONS.休息, target: "", inferred: true };
   }
@@ -180,7 +184,13 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
     return withLocationGate("练咒", ACTIONS.练咒, targetAfter(raw, /(漂浮咒|荧光闪烁|阿拉霍洞开|修复如初|除你武器)/) || "咒语练习", text);
   }
 
-  if (has(raw, ["按课表上课", "去上课", "上课", "魔咒课", "魔药课", "变形术课", "草药课", "防御术课", "魔法史课", "飞行课", "课堂表现", "回答问题", "举手回答", "被点名", "课堂展示", "课堂示范", "小测", "随堂测验"])) {
+  // 课堂表现：必须是「真的去上课 / 课堂场景」才触发，而不是随口提到某门课的名字。
+  // 用「上X课」结构 + 明确课堂用语判定；不再用裸课名（如「魔药课」）匹配，
+  // 以免「买魔药课的器材」「聊起魔药课」之类被误判成课堂检定。
+  const attendsClass =
+    /上(?:魔咒|魔药|变形术|草药学?|黑魔法防御术|防御术|魔法史|飞行|天文学?|占卜学?|算术占卜|保护神奇生物|古代如尼文|麻瓜研究)课/.test(raw) ||
+    has(raw, ["按课表上课", "去上课", "上课", "课堂表现", "回答问题", "举手回答", "被点名", "课堂展示", "课堂示范", "随堂测验", "随堂小测"]);
+  if (attendsClass) {
     return withLocationGate("课堂", ACTIONS.课堂, "课堂表现", text);
   }
 

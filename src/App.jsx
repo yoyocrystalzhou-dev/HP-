@@ -1135,9 +1135,14 @@ ${transcriptLines(chunk)}`;
         });
       }
       let relEntries = relationship.entries;
-      if (allowRelationshipDeltas && relEntries.length === 0) {
-        // 兜底：AI 没打【关系变化】标签时，从玩家这轮可见输入里识别直接互动的角色，小幅 +1
-        relEntries = inferFavorDeltas(lastUserForMechanics.display || "", projectChars, activeProject?.ocs || []);
+      if (allowRelationshipDeltas) {
+        // 兜底/补全：从玩家这轮可见输入里识别直接互动到的角色，对 AI 没有给出变化的角色
+        // （尤其是原创角色 OC，AI 常常只给原著角色加分）补一个小幅 +1，保证互动后好感会动。
+        const inferred = inferFavorDeltas(lastUserForMechanics.display || "", projectChars, activeProject?.ocs || []);
+        if (inferred.length) {
+          const have = new Set(relEntries.map((e) => e.id));
+          relEntries = [...relEntries, ...inferred.filter((e) => !have.has(e.id))];
+        }
       }
       if (relEntries.length) {
         const appliedPreview = applyRelationshipDeltas(player, relEntries).applied;
@@ -1232,8 +1237,10 @@ ${transcriptLines(chunk)}`;
     }
 
     // HP 专项：采购 / 获得物品。后台写入背包，显示为对话流里的轻量状态条。
+    // 只扫描「玩家自己这轮的输入/选项」，不扫描隐藏的世界上下文（其中可能顺带提到
+    // 猫头鹰商店、魁地奇精品店等，会导致玩家明明没买却凭空获得猫头鹰、扫帚）。
     const shoppingChanges = HP_KIOSK && activeMode === "world"
-      ? inferShoppingChanges(`${text}\n${hiddenText}`, { currentTimeLabel: activeProject?.currentTimeLabel, wandMeta: player.meta?.wand })
+      ? inferShoppingChanges(text, { currentTimeLabel: activeProject?.currentTimeLabel, wandMeta: player.meta?.wand })
       : [];
     const nextInventory = shoppingChanges.length ? applyInventoryChanges(player.inventory, shoppingChanges) : player.inventory;
     let inventoryAnchor = null;
@@ -1264,7 +1271,7 @@ ${transcriptLines(chunk)}`;
     }
     const explicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
     const naturalCmd = !explicitCmd && !disableActions && HP_KIOSK && activeMode === "world"
-      ? inferNaturalCommand(`${text}\n${hiddenText}`, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel })
+      ? inferNaturalCommand(text, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel })
       : null;
     const baseCmd = explicitCmd || naturalCmd;
     const itemIssue = baseCmd ? inventoryIssueForCommand(baseCmd, nextInventory) : "";
