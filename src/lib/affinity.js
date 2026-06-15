@@ -127,12 +127,41 @@ export function relationshipRulesBlock(characters = [], ocs = []) {
     ...(ocs || []).map((o) => o.name).filter(Boolean),
   ].slice(0, 80);
   return (
-    "【关系与好感度规则】\n" +
-    "- 好感度只由系统结算；你不得在正文中自行宣布数值、关系跨级、恋人关系或婚约。\n" +
-    "- 普通日常里，如果本轮确实发生了具体社交变化，可在回复最后单独写一行结构化标签：`【关系变化：角色名+1；角色名-1】`。\n" +
-    "- 只有明确互动才写；擦肩而过、远远看见、单方面猜测通常不写。\n" +
-    "- 日常关系变化保持小幅：普通友好/尴尬通常 ±1，明显互助/冲突 ±2，强烈共同经历最多 ±3。\n" +
+    "【关系与好感度规则（重要，务必执行）】\n" +
+    "- 好感度只由系统结算；你不得在正文里写出具体数值，也不得自行宣布关系跨级、恋人或婚约。\n" +
+    "- 只要本轮玩家与某个可识别角色发生了直接互动（交谈、同行、帮忙、关心、冲突、并肩经历等），就必须在回复的最后另起一行，输出结构化标签：\n" +
+    "  【关系变化：角色名+1】\n" +
+    "  多个角色用「；」分隔，例如：【关系变化：哈利+1；罗恩-1】。\n" +
+    "- 仅擦肩而过、远远看见、单方面回忆或猜测，不写标签。\n" +
+    "- 幅度要小：普通友好/尴尬 ±1，明显互助/冲突 ±2，强烈共同经历最多 ±3。\n" +
     "- 好感度≥60 只是心动/可告白，不等于恋人；恋人必须由系统告白结算成功后才成立。\n" +
+    "- 标签只在回复最末单独成行，正文里不要出现「好感度」「+N」之类字样。\n" +
     "- 可识别角色名：" + (names.join("、") || "当前暂无") + "。"
   );
+}
+
+/**
+ * 兜底：当 AI 本轮没有给出【关系变化】标签时，从玩家这一轮的输入里识别"直接互动到的角色"，
+ * 给予小幅 +1（最多 2 人）。保证玩家主动互动后好感有可见变化，不会永远停在 0。
+ * 用玩家可见输入（display）匹配，避免命中隐藏上下文里的角色名。
+ */
+export function inferFavorDeltas(userText, characters = [], ocs = []) {
+  const text = String(userText || "").trim();
+  if (!text) return [];
+  const all = [
+    ...(characters || []).map((c) => ({ id: c.id, name: c.name, kind: "canon" })),
+    ...(ocs || []).map((o) => ({ id: o.id, name: o.name, kind: "oc" })),
+  ].filter((c) => c.id && c.name);
+  const entries = [];
+  const seen = new Set();
+  for (const c of all) {
+    if (seen.has(c.id)) continue;
+    const first = c.name.split(/[·・]/)[0]; // 姓名首段，如"哈利·詹姆斯·波特" → "哈利"
+    if (text.includes(c.name) || (first.length >= 2 && text.includes(first))) {
+      entries.push({ id: c.id, name: c.name, kind: c.kind, delta: 1, note: "" });
+      seen.add(c.id);
+      if (entries.length >= 2) break;
+    }
+  }
+  return entries;
 }

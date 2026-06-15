@@ -40,7 +40,7 @@ import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects } 
 import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
 import {
   favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor,
-  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock,
+  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock, inferFavorDeltas,
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
@@ -1131,11 +1131,16 @@ ${transcriptLines(chunk)}`;
           return { ...p, playerCharacter: { ...pc, stats: applyDailyGrowth(pc.stats, daily.entries) } };
         });
       }
-      if (relationship.entries.length) {
-        const appliedPreview = applyRelationshipDeltas(player, relationship.entries).applied;
+      let relEntries = relationship.entries;
+      if (allowRelationshipDeltas && relEntries.length === 0) {
+        // 兜底：AI 没打【关系变化】标签时，从玩家这轮可见输入里识别直接互动的角色，小幅 +1
+        relEntries = inferFavorDeltas(lastUserForMechanics.display || "", projectChars, activeProject?.ocs || []);
+      }
+      if (relEntries.length) {
+        const appliedPreview = applyRelationshipDeltas(player, relEntries).applied;
         patchProject((p) => {
           const pc = p.playerCharacter || {};
-          const result = applyRelationshipDeltas(pc, relationship.entries);
+          const result = applyRelationshipDeltas(pc, relEntries);
           return { ...p, playerCharacter: result.player };
         });
         relationshipLine = formatRelationshipDeltaLine(appliedPreview);
@@ -2339,7 +2344,7 @@ ${transcriptLines(chunk)}`;
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
               placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
               rows={1}
-              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
+              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
             />
             <button
               onClick={() => send()}
