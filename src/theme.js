@@ -139,6 +139,125 @@ export const DARK = {
   serif:       "Georgia, 'Noto Serif SC', 'Songti SC', serif",
 };
 
+// ─── HP kiosk panel palettes ───────────────────────────────────────────
+export const HP_DAY = {
+  bg:         "linear-gradient(180deg, #fbfaf5 0%, #f0eadf 52%, #ddd1bd 100%)",
+  bgSidebar:  "linear-gradient(180deg, rgba(255,255,250,0.96), rgba(231,219,199,0.94))",
+  surface:    "rgba(255,255,250,0.74)",
+  surface2:   "rgba(255,255,250,0.82)",
+  hover:      "rgba(225,211,188,0.56)",
+
+  border:     "rgba(157,138,108,0.48)",
+  borderSoft: "rgba(157,138,108,0.26)",
+
+  text:       "#5b4b3a",
+  textDim:    "rgba(92,76,58,0.70)",
+  textFaint:  "rgba(92,76,58,0.48)",
+
+  userBubble: "rgba(236,223,199,0.88)",
+
+  accent:     "#8f7652",
+  accentText: "#fffaf0",
+  accentSoft: "rgba(157,138,108,0.18)",
+
+  danger:      "#9e4e46",
+  dangerBg:    "rgba(158,78,70,0.10)",
+  greenBg:     "rgba(109,132,92,0.12)",
+  greenBorder: "rgba(109,132,92,0.28)",
+  greenText:   "#687d56",
+  warnText:    "#8b6c2f",
+  warnBorder:  "rgba(139,108,47,0.32)",
+  warnBg:      "rgba(233,218,184,0.42)",
+
+  radius:      16,
+  radiusSm:    10,
+  shadow:      "0 12px 28px rgba(93,76,54,0.12)",
+  shadowSoft:  "0 6px 18px rgba(93,76,54,0.10)",
+  overlay:     "rgba(255,255,250,0.84)",
+
+  frame:       "linear-gradient(180deg, rgba(255,255,250,0.96), rgba(231,219,199,0.93)), repeating-linear-gradient(0deg, rgba(157,138,108,0.035) 0 1px, transparent 1px 22px)",
+  headerBar:   "linear-gradient(180deg, rgba(255,255,250,0.82), rgba(239,232,218,0.66))",
+  chatBackdrop:"radial-gradient(70% 76% at 50% 18%, rgba(255,255,250,0.50), transparent 72%)",
+  emptyPanel:  "linear-gradient(180deg, rgba(255,255,250,0.78), rgba(231,219,199,0.54))",
+  inputBar:    "linear-gradient(180deg, rgba(255,255,250,0.40), rgba(213,201,181,0.22))",
+  inputField:  "linear-gradient(180deg, rgba(255,255,250,0.96), rgba(239,232,218,0.88))",
+  softControl: "rgba(255,255,250,0.54)",
+  seal:        "radial-gradient(circle at 35% 30%, #bba98a, #8f7652 52%, #5e4a34 100%)",
+  titleText:   "linear-gradient(92deg, #7f6340, #a68d65 58%, #8f5d54)",
+  gold:        "#9d8a6c",
+  goldDim:     "#7a694f",
+  red:         "#9e4e46",
+  redLit:      "#b76760",
+  ink:         "#5b4b3a",
+  muted:       "rgba(92,76,58,0.66)",
+  faint:       "rgba(92,76,58,0.44)",
+  line:        "rgba(157,138,108,0.52)",
+  lineSoft:    "rgba(157,138,108,0.28)",
+  paper:       "linear-gradient(180deg, rgba(255,255,250,0.94), rgba(236,228,213,0.92)), repeating-linear-gradient(0deg, rgba(157,138,108,0.045) 0 1px, transparent 1px 24px)",
+  userPaper:   "linear-gradient(180deg, rgba(255,250,235,0.95), rgba(229,211,178,0.92)), repeating-linear-gradient(0deg, rgba(157,138,108,0.05) 0 1px, transparent 1px 24px)",
+  paperText:   "#5a4733",
+  serif:       "Georgia, 'Noto Serif SC', 'Songti SC', serif",
+};
+
+export const HP_NIGHT = {
+  bg:         "linear-gradient(180deg, #0a0b12 0%, #0d1018 45%, #070709 100%)",
+  bgSidebar:  "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))",
+  surface:    "rgba(217,195,139,0.07)",
+  surface2:   "rgba(217,195,139,0.09)",
+  hover:      "rgba(217,195,139,0.13)",
+
+  border:     "rgba(217,195,139,0.42)",
+  borderSoft: "rgba(217,195,139,0.22)",
+
+  text:       "#f1e7ce",
+  textDim:    "rgba(241,231,206,0.72)",
+  textFaint:  "rgba(241,231,206,0.44)",
+
+  userBubble: "rgba(217,195,139,0.12)",
+
+  accent:     "#d9c38b",
+  accentText: "#141018",
+  accentSoft: "rgba(217,195,139,0.14)",
+
+  danger:      "#d98179",
+  dangerBg:    "rgba(190,82,76,0.12)",
+  greenBg:     "rgba(95,166,132,0.12)",
+  greenBorder: "rgba(95,166,132,0.28)",
+  greenText:   "#94d0b2",
+  warnText:    "#e8c766",
+  warnBorder:  "rgba(232,199,102,0.34)",
+  warnBg:      "rgba(232,199,102,0.10)",
+
+  radius:      16,
+  radiusSm:    10,
+  shadow:      "0 18px 46px rgba(0,0,0,0.42)",
+  shadowSoft:  "0 10px 26px rgba(0,0,0,0.30)",
+  overlay:     "rgba(10,11,18,0.84)",
+
+  frame:       "linear-gradient(180deg, rgba(22,24,34,0.98), rgba(10,11,16,0.99)), repeating-linear-gradient(0deg, rgba(217,195,139,0.035) 0 1px, transparent 1px 24px)",
+  headerBar:   "rgba(10,11,18,0.55)",
+  chatBackdrop:"radial-gradient(70% 80% at 50% 18%, rgba(217,195,139,0.045), transparent 72%)",
+  emptyPanel:  "linear-gradient(180deg, rgba(217,195,139,0.08), rgba(9,12,18,0.34))",
+  inputBar:    "rgba(9,12,18,0.74)",
+  inputField:  "linear-gradient(180deg, rgba(20,23,32,0.96), rgba(9,11,17,0.97))",
+  softControl: "rgba(217,195,139,0.09)",
+  seal:        "radial-gradient(circle at 35% 30%, #CF4C45, #8F1E22 48%, #4B0D12 100%)",
+  titleText:   "linear-gradient(92deg, #fff0bc, #d9c38b 58%, #c56861)",
+  gold:        "#d9c38b",
+  goldDim:     "#a89363",
+  red:         "#be524c",
+  redLit:      "#d56b64",
+  ink:         "#f2dfaa",
+  muted:       "rgba(241,231,206,0.66)",
+  faint:       "rgba(241,231,206,0.38)",
+  line:        "rgba(217,195,139,0.50)",
+  lineSoft:    "rgba(217,195,139,0.24)",
+  paper:       "linear-gradient(180deg, rgba(25,28,38,0.96), rgba(12,14,22,0.97)), repeating-linear-gradient(0deg, rgba(217,195,139,0.035) 0 1px, transparent 1px 24px)",
+  userPaper:   "linear-gradient(180deg, rgba(34,31,35,0.96), rgba(16,15,21,0.97)), repeating-linear-gradient(0deg, rgba(217,195,139,0.035) 0 1px, transparent 1px 24px)",
+  paperText:   "#f1e7ce",
+  serif:       "Georgia, 'Noto Serif SC', 'Songti SC', serif",
+};
+
 /**
  * Single mutable palette object. Components import this by reference and read
  * its keys at render time, so mutating it (below) + re-rendering re-themes the
@@ -146,10 +265,10 @@ export const DARK = {
  */
 export const T = { ...LIGHT };
 
-export const THEMES = { light: LIGHT, dark: DARK };
+export const THEMES = { light: LIGHT, dark: DARK, "hp-day": HP_DAY, "hp-night": HP_NIGHT };
 
 /** Swap the active palette in place. Caller must trigger a re-render. */
 export function applyTheme(mode) {
-  Object.assign(T, mode === "dark" ? DARK : LIGHT);
+  Object.assign(T, THEMES[mode] || LIGHT);
   return T;
 }

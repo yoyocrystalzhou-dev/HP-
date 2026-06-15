@@ -53,7 +53,7 @@ import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, 
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
-import { CornerFlourish, DAY_BG, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
+import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -112,15 +112,15 @@ export default function App() {
   // so every inline style re-reads the mutated `T`. (See theme.js.)
   const [themeNonce, setThemeNonce] = useState(0);
   useEffect(() => {
-    applyTheme(themeMode);
+    applyTheme(HP_KIOSK ? (hpUiMode === "night" ? "hp-night" : "hp-day") : themeMode);
     setThemeNonce((n) => n + 1);
-  }, [themeMode]);
+  }, [themeMode, hpUiMode]);
   const toggleTheme = () => setThemeMode((m) => (m === "dark" ? "light" : "dark"));
 
   // ── Ephemeral ──
   const [hpHome,      setHpHome]      = useState(true); // HP 专项：是否停在三世代首页
   const [creatingPresetId, setCreatingPresetId] = useState(null); // 正在为哪个世代创建角色
-  const [statsOpen,   setStatsOpen]   = useState(false); // 移动端数值底部抽屉
+  const [hpSheet,     setHpSheet]     = useState(null); // HP 顶部徽章面板
   const [ocCreatorOpen, setOcCreatorOpen] = useState(false); // 原创角色创建
   const [view,        setView]        = useState("workspace"); // "workspace" | "projects"
   const [panel,       setPanel]       = useState(null);
@@ -168,19 +168,35 @@ export default function App() {
     ...projectChars.map((c) => [c.id, c.name]),
     ...((activeProject?.ocs || []).map((o) => [o.id, o.name])),
   ]);
+  const ocById        = Object.fromEntries((activeProject?.ocs || []).map((o) => [o.id, o]));
+  // HP 专项：给好感条目附带头像 + 副标题，供「好感」页展示
+  const favorEnrich = (id, kind) => {
+    if (kind === "oc") {
+      const o = ocById[id] || {};
+      const sub = [o.gender, o.house].filter(Boolean).join(" · ")
+        || (o.tieName ? `${o.tieName} 的${o.tieRelation || "熟人"}` : "原创角色");
+      return { avatar: o.gender === "女" ? "🧙‍♀️" : o.gender === "男" ? "🧙‍♂️" : "🧙", sub };
+    }
+    const c = charsById[id] || {};
+    return { avatar: c.avatar || "🧙", sub: "原著角色" };
+  };
   const favorList     = [
     ...Object.entries(player.favor || {})
       .filter(([, v]) => Number(v) > 0)
-      .map(([id, v]) => ({
-        id,
-        name: charNameById[id] || id,
-        value: v,
-        relationship: player.state?.relationships?.[id] || null,
-        kind: (activeProject?.ocs || []).some((o) => o.id === id) ? "oc" : "canon",
-      })),
+      .map(([id, v]) => {
+        const kind = (activeProject?.ocs || []).some((o) => o.id === id) ? "oc" : "canon";
+        return {
+          id,
+          name: charNameById[id] || id,
+          value: v,
+          relationship: player.state?.relationships?.[id] || null,
+          kind,
+          ...favorEnrich(id, kind),
+        };
+      }),
     ...((activeProject?.ocs || [])
       .filter((o) => !(player.favor || {})[o.id])
-      .map((o) => ({ id: o.id, name: o.name, value: 0, relationship: player.state?.relationships?.[o.id] || null, kind: "oc" }))),
+      .map((o) => ({ id: o.id, name: o.name, value: 0, relationship: player.state?.relationships?.[o.id] || null, kind: "oc", ...favorEnrich(o.id, "oc") }))),
   ].sort((a, b) => b.value - a.value || (a.kind === "oc" ? -1 : 1));
   const activeMode    = HP_KIOSK ? "world" : (activeProject?.activeMode || "world");
   const activeCharId  = activeProject?.activeCharId || null;
@@ -241,37 +257,47 @@ export default function App() {
       }
     : {
         bg: DAY_BG,
-        chromeBg: "linear-gradient(180deg, rgba(255,255,250,0.82), rgba(239,232,218,0.66))",
+        chromeBg: "linear-gradient(180deg, rgba(248,246,235,0.96), rgba(230,223,205,0.88))",
         stageBg:
-          "radial-gradient(70% 76% at 50% 18%, rgba(255,255,250,0.50), transparent 72%)," +
-          "linear-gradient(90deg, rgba(255,255,250,0.16), transparent 14%, transparent 86%, rgba(255,255,250,0.16))",
-        chromeText: "#5b4b3a",
-        chromeMuted: "rgba(92,76,58,0.58)",
-        line: "rgba(171,151,122,0.34)",
-        controlBg: "rgba(255,255,250,0.56)",
-        emptyText: "rgba(92,76,58,0.58)",
-        calendarBg: "rgba(255,255,250,0.68)",
-        calendarChoiceBg: "rgba(255,255,250,0.76)",
-        calendarText: "#5b4b3a",
-        calendarMuted: "rgba(92,76,58,0.62)",
-        calendarGold: "#9d8a6c",
-        inputBar: "linear-gradient(180deg, rgba(255,255,250,0.40), rgba(213,201,181,0.22))",
-        inputPaper: "linear-gradient(180deg, rgba(255,255,250,0.98), rgba(234,226,211,0.96))",
-        inputInk: "#5a4733",
-        inputBorder: "rgba(171,151,122,0.64)",
-        flourishInk: "rgba(157,138,108,0.78)",
-        cardBg: "linear-gradient(180deg, rgba(255,255,250,0.93), rgba(236,228,213,0.90)), repeating-linear-gradient(0deg, rgba(157,138,108,0.045) 0 1px, transparent 1px 24px)",
-        cardText: "#6a5844",
-        cardInkUser: "rgba(157,138,108,0.86)",
-        cardInkNarrator: "rgba(142,122,94,0.88)",
-        cardShadow: "0 18px 42px rgba(93,76,54,0.20), inset 0 0 0 5px rgba(255,255,250,0.28)",
-        actionBg: "rgba(255,255,250,0.52)",
-        actionText: "rgba(92,76,58,0.66)",
-        noteBg: "rgba(255,255,250,0.68)",
-        noteBorder: "rgba(171,151,122,0.34)",
-        noteText: "#7a694f",
+          "radial-gradient(80% 58% at 50% 12%, rgba(255,255,250,0.58), transparent 72%)," +
+          "linear-gradient(90deg, rgba(176,158,122,0.11), transparent 12%, transparent 88%, rgba(176,158,122,0.11))",
+        chromeText: "#827866",
+        chromeMuted: "rgba(118,105,85,0.62)",
+        line: "rgba(142,128,100,0.34)",
+        controlBg: "rgba(246,242,228,0.72)",
+        emptyText: "rgba(118,105,85,0.58)",
+        calendarBg: "linear-gradient(180deg, rgba(250,248,239,0.94), rgba(225,218,201,0.78))",
+        calendarChoiceBg: "linear-gradient(180deg, rgba(250,248,239,0.94), rgba(221,213,195,0.82))",
+        calendarText: "#746956",
+        calendarMuted: "rgba(118,105,85,0.62)",
+        calendarGold: "#9b8d73",
+        inputBar: "linear-gradient(180deg, rgba(230,223,205,0.42), rgba(206,194,170,0.30))",
+        inputPaper: "linear-gradient(180deg, rgba(252,250,242,0.98), rgba(232,226,210,0.96))",
+        inputInk: "#6b604f",
+        inputBorder: "rgba(142,128,100,0.58)",
+        flourishInk: "rgba(132,119,94,0.72)",
+        cardBg: "linear-gradient(180deg, rgba(250,248,239,0.84), rgba(235,229,212,0.82)), repeating-linear-gradient(0deg, rgba(132,119,94,0.035) 0 1px, transparent 1px 24px)",
+        cardText: "#746956",
+        cardInkUser: "rgba(132,119,94,0.82)",
+        cardInkNarrator: "rgba(132,119,94,0.82)",
+        cardShadow: "0 16px 36px rgba(93,76,54,0.16), inset 0 0 0 4px rgba(255,255,250,0.36), inset 0 0 0 1px rgba(132,119,94,0.20)",
+        actionBg: "rgba(250,248,239,0.68)",
+        actionText: "rgba(118,105,85,0.70)",
+        noteBg: "rgba(250,248,239,0.74)",
+        noteBorder: "rgba(142,128,100,0.34)",
+        noteText: "#746956",
         seal: "radial-gradient(circle at 35% 30%, #bba98a, #8f7652 52%, #5e4a34 100%)",
       };
+  const hpBadges = [
+    { key: "inventory", label: "背包", mark: "背", glyph: "M18 13h8l2 13H16l2-13Zm1-3h6l1 3h-8l1-3Z" },
+    { key: "contribution", label: "贡献", mark: "贡", glyph: "M16 13h12v4q0 4-6 6q-6-2-6-6v-4Zm3 12h6M20 28h4" },
+    { key: "status", label: "状态", mark: "状", glyph: "M22 12v17M15 20h14M17 14l5-4 5 4M17 26l5 4 5-4" },
+    { key: "favor", label: "好感", mark: "好", glyph: "M22 29s-8-5-8-11q0-4 4-4 3 0 4 3 1-3 4-3 4 0 4 4 0 6-8 11Z" },
+    { key: "courses", label: "课程", mark: "课", glyph: "M15 13h8q4 0 4 4v11h-8q-4 0-4-4V13Zm8 0h6v15h-6" },
+    { key: "people", label: "人物", mark: "人", glyph: "M22 19a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 11q2-7 8-7t8 7" },
+    { key: "settings", label: "设置", mark: "设", glyph: "M22 15l2 2 3-1 2 4-3 2v3l3 2-2 4-3-1-2 2-2-2-3 1-2-4 3-2v-3l-3-2 2-4 3 1 2-2Zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" },
+  ];
+  const hpSheetTitle = hpBadges.find((badge) => badge.key === hpSheet)?.label || "";
 
   const worldChatList = worldChatsOf(sessions, activeProject);
   const charChatList  = characterChatsOf(sessions, scopeChar);
@@ -443,7 +469,7 @@ export default function App() {
     setSessions((prev) => { const n = { ...prev }; victimIds.forEach((s) => delete n[s]); return n; });
     setProjects((prev) => { const n = { ...prev }; delete n[id]; return n; });
     setActiveProjectId(null);
-    setStatsOpen(false);
+    setHpSheet(null);
     setPanel(null);
     if (presetId) setCreatingPresetId(presetId);
     else setHpHome(true);
@@ -1570,12 +1596,49 @@ ${transcriptLines(chunk)}`;
         display: "flex", flexDirection: "column",
         boxShadow: panel ? "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" : "none",
       };
+  const hpSheetChrome = {
+    width: "min(92vw, 560px)",
+    maxHeight: "78vh",
+    overflow: "auto",
+    border: `1px solid ${hpUi.inputBorder}`,
+    borderRadius: hpIsNight ? 18 : 12,
+    background: hpIsNight
+      ? "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))"
+      : "linear-gradient(180deg, rgba(255,255,250,0.97), rgba(231,219,199,0.96))",
+    boxShadow: hpIsNight
+      ? "0 28px 80px rgba(0,0,0,0.58), inset 0 0 0 4px rgba(217,195,139,0.035)"
+      : "0 28px 80px rgba(93,76,54,0.24), inset 0 0 0 4px rgba(255,255,250,0.42)",
+    color: hpUi.cardText,
+  };
+  const renderHpSheetContent = () => {
+    if (!hpSheet) return null;
+    if (hpSheet === "settings") return <SettingsPanel config={config} onSave={(c) => { setConfig(c); setStatus("配置已保存 ✓"); setTimeout(() => setStatus(""), 2000); setHpSheet(null); }} />;
+    if (hpSheet === "people") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <CharacterPanel
+            characters={projectChars} activeId={activeCharId} activeMode={activeMode}
+            player={player} onEditPlayer={handlePlayerEdit}
+            onSelect={handleCharSelect} onEdit={handleCharEdit} onDelete={handleCharDelete}
+            onImportChars={handleImportChars}
+            profileOnly={HP_KIOSK}
+          />
+          <StatusBar player={player} variant="sheet" section="people" uiMode={hpTone} favorList={favorList} houseCup={houseCup}
+            ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => { setHpSheet(null); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
+        </div>
+      );
+    }
+    return (
+      <StatusBar player={player} variant="sheet" section={hpSheet} uiMode={hpTone} favorList={favorList} houseCup={houseCup}
+        ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => { setHpSheet(null); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
+    );
+  };
 
   return (
-    <div style={{ display: "flex", gap: isMobile ? 0 : 14, height: "100dvh", width: "100%", overflow: "hidden", background: HP_KIOSK ? hpUi.bg : V.bg, color: HP_KIOSK ? hpUi.chromeText : V.ink, position: "relative", padding: isMobile ? 0 : 16 }}>
+    <div style={{ display: "flex", justifyContent: HP_KIOSK ? "center" : undefined, gap: isMobile ? 0 : 14, height: "100dvh", width: "100%", overflow: "hidden", background: HP_KIOSK ? hpUi.bg : V.bg, color: HP_KIOSK ? hpUi.chromeText : V.ink, position: "relative", padding: HP_KIOSK ? (isMobile ? 0 : 10) : (isMobile ? 0 : 16) }}>
 
-      {/* HP 专项：星尘背景 */}
-      {HP_KIOSK && <Starfield count={70} tone={hpTone} />}
+      {/* HP 专项：夜间星尘 / 日间纸纹花饰 */}
+      {HP_KIOSK && hpIsNight && <Starfield count={70} tone={hpTone} />}
 
       {/* Mobile drawer backdrop */}
       {isMobile && panel && (
@@ -1699,18 +1762,22 @@ ${transcriptLines(chunk)}`;
         </div>
       </div>
 
-      {/* ════ HP 专项：玩家养成数值面板（桌面左侧栏）════ */}
-      {HP_KIOSK && !isMobile && activeMode === "world" && player?.stats && (
-        <StatusBar player={player} variant="rail" uiMode={hpTone} favorList={favorList} houseCup={houseCup} onRestart={restartGame}
-          ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => setOcCreatorOpen(true)} onRemoveOc={removeOc} />
-      )}
-
-      {/* 移动端：数值底部抽屉 */}
-      {HP_KIOSK && isMobile && statsOpen && player?.stats && (
-        <div onClick={() => setStatsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "82vh", overflow: "auto", background: hpIsNight ? "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))" : "linear-gradient(180deg, rgba(255,241,207,0.98), rgba(222,197,143,0.99))", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTop: `1px solid ${hpUi.line}`, boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}>
-            <StatusBar player={player} variant="sheet" uiMode={hpTone} onClose={() => setStatsOpen(false)} favorList={favorList} houseCup={houseCup} onRestart={restartGame}
-              ocs={activeProject?.ocs || []} clues={clues} onAddOc={() => { setStatsOpen(false); setOcCreatorOpen(true); }} onRemoveOc={removeOc} />
+      {/* HP 专项：顶部徽章打开的纸质面板 */}
+      {HP_KIOSK && hpSheet && player?.stats && (
+        <div onClick={() => setHpSheet(null)} style={{ position: "fixed", inset: 0, zIndex: 70, background: hpIsNight ? "rgba(0,0,0,0.62)" : "rgba(75,60,42,0.22)", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", padding: isMobile ? "18px 10px" : 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={hpSheetChrome}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 16px", borderBottom: `1px solid ${hpUi.line}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${hpUi.line}`, display: "grid", placeItems: "center", color: hpUi.calendarGold, fontFamily: V.serif, fontWeight: 900, background: hpUi.controlBg }}>
+                  {hpBadges.find((badge) => badge.key === hpSheet)?.mark || "H"}
+                </span>
+                <span style={{ fontFamily: V.serif, color: hpUi.chromeText, fontSize: 15, fontWeight: 900 }}>{hpSheetTitle}</span>
+              </div>
+              <button onClick={() => setHpSheet(null)} aria-label="关闭" style={{ width: 30, height: 30, borderRadius: 10, border: `1px solid ${hpUi.line}`, background: "transparent", color: hpUi.chromeMuted, cursor: "pointer", fontSize: 16 }}>×</button>
+            </div>
+            <div style={{ padding: hpSheet === "settings" || hpSheet === "people" ? 16 : 0 }}>
+              {renderHpSheetContent()}
+            </div>
           </div>
         </div>
       )}
@@ -1727,20 +1794,113 @@ ${transcriptLines(chunk)}`;
       )}
 
       {/* ════ Chat area ════ */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, position: "relative", zIndex: 1, border: isMobile || HP_KIOSK ? "none" : `1px solid ${V.line}`, borderRadius: isMobile ? 0 : 20, background: HP_KIOSK ? "transparent" : V.frame, boxShadow: isMobile || HP_KIOSK ? "none" : "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" }}>
-
+      <div style={{
+        flex: HP_KIOSK ? "0 1 674px" : 1,
+        width: HP_KIOSK ? "100%" : undefined,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        minWidth: 0,
+        position: "relative",
+        zIndex: 1,
+        border: HP_KIOSK ? `1.4px solid ${hpUi.inputBorder}` : (isMobile ? "none" : `1px solid ${V.line}`),
+        borderRadius: HP_KIOSK ? (isMobile ? 0 : 12) : (isMobile ? 0 : 20),
+        background: HP_KIOSK
+          ? (hpIsNight ? "rgba(8,9,14,0.50)" : "linear-gradient(180deg, rgba(247,245,235,0.86), rgba(226,218,199,0.82))")
+          : V.frame,
+        boxShadow: HP_KIOSK
+          ? (hpIsNight ? "0 28px 90px rgba(0,0,0,0.50), inset 0 0 0 3px rgba(217,195,139,0.04)" : "0 18px 48px rgba(93,76,54,0.18), inset 0 0 0 3px rgba(255,255,255,0.36), inset 0 0 0 5px rgba(126,112,88,0.08)")
+          : (isMobile ? "none" : "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)"),
+      }}>
         {/* Header */}
-        <div style={{ height: HP_KIOSK && isMobile ? 78 : isMobile ? 56 : 60, borderBottom: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.chromeBg : V.headerBar, backdropFilter: HP_KIOSK ? "blur(8px)" : undefined, display: "flex", alignItems: "center", alignContent: HP_KIOSK && isMobile ? "center" : undefined, flexWrap: HP_KIOSK && isMobile ? "wrap" : "nowrap", padding: HP_KIOSK && isMobile ? "8px 12px 7px" : "0 14px", gap: HP_KIOSK && isMobile ? "5px 8px" : 12, flexShrink: 0 }}>
-          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 7, overflow: "hidden", order: HP_KIOSK && isMobile ? 1 : 0 }}>
+        {HP_KIOSK ? (
+          <div style={{
+            flexShrink: 0,
+            position: "relative",
+            zIndex: 1,
+            borderBottom: `1px solid ${hpUi.line}`,
+            background: hpIsNight ? hpUi.chromeBg : "linear-gradient(180deg, rgba(248,246,235,0.78), rgba(230,223,205,0.48))",
+            backdropFilter: "blur(8px)",
+            boxShadow: hpIsNight ? "0 10px 30px rgba(0,0,0,0.24)" : "0 10px 26px rgba(93,76,54,0.12)",
+            padding: isMobile ? "5px 8px 10px" : "7px 18px 14px",
+          }}>
+            <div style={{ position: "relative", zIndex: 1, maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 5 : 8 }}>
+              <div style={{ width: "100%", display: "grid", gridTemplateColumns: "30px 1fr 30px", alignItems: "center", gap: 8, padding: isMobile ? "0 2px" : "0 4px" }}>
+                <button
+                  onClick={() => { setHpHome(true); setPanel(null); setHpSheet(null); }}
+                  title="返回"
+                  style={{ width: 28, height: 28, border: "none", borderRadius: 0, background: "transparent", color: hpUi.calendarGold, cursor: "pointer", display: "grid", placeItems: "center", opacity: 0.72 }}
+                >
+                  <I.Back />
+                </button>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: isMobile ? 3 : 8, minWidth: 0 }}>
+                  {hpBadges.map((badge) => {
+                    const active = hpSheet === badge.key;
+                    return (
+                      <button
+                        key={badge.key}
+                        onClick={() => setHpSheet((cur) => (cur === badge.key ? null : badge.key))}
+                        title={badge.label}
+                        aria-label={badge.label}
+                        style={{
+                          width: isMobile ? 30 : 40,
+                          height: isMobile ? 30 : 40,
+                          borderRadius: 0,
+                          border: "none",
+                          background: "transparent",
+                          color: active ? hpUi.chromeText : hpUi.calendarGold,
+                          filter: active ? "drop-shadow(0 3px 5px rgba(95,76,54,0.22))" : "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          fontFamily: V.serif,
+                          fontWeight: 900,
+                          fontSize: isMobile ? 11 : 13,
+                        }}
+                      >
+                        <svg viewBox="0 0 44 44" width="100%" height="100%" aria-hidden="true">
+                          <path d="M8 6h28l3 5-2 22-15 7L7 33 5 11 8 6Z" fill={active ? (hpIsNight ? "rgba(217,195,139,0.16)" : "rgba(232,226,210,0.92)") : (hpIsNight ? "rgba(217,195,139,0.08)" : "rgba(247,244,232,0.86)")} stroke="currentColor" strokeWidth="1.35" />
+                          <path d="M12 11h20l2 4-1.6 15.5L22 35.5 11.6 30.5 10 15l2-4Z" fill="none" stroke="currentColor" strokeWidth="0.65" opacity="0.55" />
+                          <path d={badge.glyph} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.78" />
+                          <circle cx="22" cy="9.5" r="1.2" fill="currentColor" opacity="0.5" />
+                        </svg>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setHpUiMode((mode) => (mode === "night" ? "day" : "night"))}
+                  title="切换日夜界面"
+                  style={{ width: 28, height: 28, border: "none", borderRadius: 0, background: "transparent", color: hpUi.chromeMuted, cursor: "pointer", fontFamily: V.serif, fontWeight: 900, opacity: 0.72 }}
+                >
+                  {hpIsNight ? "夜" : "日"}
+                </button>
+              </div>
+
+              <FoilTitle tone={hpTone} mobile={isMobile}>Harry Potter</FoilTitle>
+
+              <div title={currentCanonBeat ? `${currentCanonBeat.part}｜原著：${currentCanonBeat.event}` : "当前时间"} style={{ display: "grid", gridTemplateColumns: "minmax(24px, 1fr) auto minmax(24px, 1fr)", alignItems: "center", gap: isMobile ? 7 : 12, width: "min(100%, 520px)", color: hpUi.chromeText }}>
+                <span style={{ height: 1, background: `linear-gradient(90deg, transparent, ${hpUi.line})` }} />
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minWidth: 0 }}>
+                  <span style={{ color: hpUi.calendarGold, display: "flex", opacity: 0.8 }}><I.Calendar /></span>
+                  <span style={{ fontFamily: V.serif, fontSize: isMobile ? 13 : 15, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
+                  {currentCanonBeat && phaseName(currentCanonBeat) && <span style={{ color: hpUi.chromeMuted, fontSize: isMobile ? 10 : 11, fontWeight: 700, whiteSpace: "nowrap" }}>{phaseName(currentCanonBeat)}</span>}
+                </span>
+                <span style={{ height: 1, background: `linear-gradient(90deg, ${hpUi.line}, transparent)` }} />
+              </div>
+
+            </div>
+          </div>
+        ) : (
+        <div style={{ height: isMobile ? 56 : 60, borderBottom: `1px solid ${V.lineSoft}`, background: V.headerBar, display: "flex", alignItems: "center", padding: "0 14px", gap: 12, flexShrink: 0 }}>
+          <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 7, overflow: "hidden" }}>
             <button
               onClick={() => { setHpHome(true); setPanel(null); }}
               title="项目列表"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, border: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, borderRadius: 13, background: HP_KIOSK ? hpUi.controlBg : V.softControl, color: HP_KIOSK ? hpUi.calendarGold : V.gold, cursor: "pointer", flexShrink: 0 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, border: `1px solid ${V.lineSoft}`, borderRadius: 13, background: V.softControl, color: V.gold, cursor: "pointer", flexShrink: 0 }}
             >
               <I.Back />
             </button>
             {isMobile ? (
-              HP_KIOSK ? null : (
               <button
                 onClick={() => setPanel((p) => (p ? null : "sessions"))}
                 title="菜单"
@@ -1748,7 +1908,6 @@ ${transcriptLines(chunk)}`;
               >
                 <I.Menu />
               </button>
-              )
             ) : (
               headerTabs.map((t) => (
                 <button key={t.key} onClick={() => setPanel((p) => (p === t.key ? null : t.key))} style={{
@@ -1764,47 +1923,7 @@ ${transcriptLines(chunk)}`;
               ))
             )}
           </div>
-
-          {/* Centre */}
-          {HP_KIOSK ? (
-            /* HP 专项：时间 + 学年阶段（挪到头部正中）*/
-            <div style={{ flex: HP_KIOSK && isMobile ? "1 0 100%" : "1 1 0", order: HP_KIOSK && isMobile ? 3 : 0, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: HP_KIOSK && isMobile ? "visible" : "hidden", padding: HP_KIOSK && isMobile ? "0 4px" : "0 8px" }}>
-              <div
-                title={currentCanonBeat ? `${currentCanonBeat.part}｜原著：${currentCanonBeat.event}` : "当前时间"}
-                style={{
-                  maxWidth: isMobile ? "100%" : 560,
-                  minWidth: isMobile ? 0 : 220,
-                  display: "grid",
-                  gridTemplateColumns: "minmax(20px, 1fr) auto minmax(20px, 1fr)",
-                  alignItems: "center",
-                  gap: isMobile ? 7 : 11,
-                  padding: isMobile ? "3px 6px" : "5px 10px",
-                  color: hpUi.chromeText,
-                }}
-              >
-                <span style={{ height: 1, background: `linear-gradient(90deg, transparent, ${hpUi.line})`, position: "relative" }}>
-                  <span style={{ position: "absolute", right: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: hpUi.calendarGold, opacity: 0.75 }} />
-                </span>
-                <span style={{ minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 2px" }}>
-                  <span style={{ color: hpUi.calendarGold, display: "flex", opacity: 0.86, flexShrink: 0 }}><I.Calendar /></span>
-                  <span style={{ minWidth: 0, display: "flex", flexWrap: isMobile ? "wrap" : "nowrap", alignItems: "baseline", justifyContent: "center", gap: "2px 7px", textAlign: "center" }}>
-                    <span style={{ fontFamily: V.serif, fontSize: isMobile ? 13 : 14, fontWeight: 800, color: hpUi.chromeText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap", lineHeight: 1.2 }}>
-                      {activeProject.currentTimeLabel || "未设定时间"}
-                    </span>
-                    {currentCanonBeat && phaseName(currentCanonBeat) && (
-                      <span style={{ color: hpUi.chromeMuted, fontSize: isMobile ? 10.5 : 11.5, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5 }}>
-                        {phaseName(currentCanonBeat)}
-                      </span>
-                    )}
-                  </span>
-                </span>
-                <span style={{ height: 1, background: `linear-gradient(90deg, ${hpUi.line}, transparent)`, position: "relative" }}>
-                  <span style={{ position: "absolute", left: -2, top: -2, width: 5, height: 5, borderRadius: "50%", background: hpUi.calendarGold, opacity: 0.75 }} />
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div style={{ flex: "0 1 auto", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", minWidth: isMobile ? 0 : 220, maxWidth: isMobile ? "none" : 420, overflow: "hidden", padding: "0 8px" }}>
+          <div style={{ flex: "0 1 auto", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", minWidth: isMobile ? 0 : 220, maxWidth: isMobile ? "none" : 420, overflow: "hidden", padding: "0 8px" }}>
               {!isMobile && (
                 <>
                   <Avatar value={activeProject.icon} fallback="📁" size={22} radius={7} style={{ flexShrink: 0 }} />
@@ -1823,50 +1942,8 @@ ${transcriptLines(chunk)}`;
                 </>
               )}
             </div>
-          )}
 
-          <div style={{ flex: HP_KIOSK ? "0 0 auto" : "1 1 0", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, overflow: "hidden", order: HP_KIOSK && isMobile ? 2 : 0, marginLeft: HP_KIOSK && isMobile ? "auto" : 0 }}>
-            {/* HP 专项：状态栏入口（移动端，桌面端已是常驻左栏）*/}
-            {HP_KIOSK && isMobile && activeMode === "world" && player?.stats && (
-              <button
-                onClick={() => setStatsOpen(true)}
-                title="养成数值"
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 11px", border: `1px solid ${hpUi.line}`, borderRadius: 999, background: hpUi.controlBg, color: hpUi.chromeText, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
-              >
-                <I.Book />
-                <span>状态</span>
-              </button>
-            )}
-            {HP_KIOSK && (
-              <button
-                onClick={() => setHpUiMode((mode) => (mode === "night" ? "day" : "night"))}
-                title="切换日夜界面"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${hpUi.line}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : hpUi.controlBg, color: hpUi.chromeMuted, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: V.serif, flexShrink: 0, letterSpacing: 0.5 }}
-              >
-                {hpIsNight ? "夜" : "日"}
-              </button>
-            )}
-            {HP_KIOSK && (
-              <button
-                onClick={() => setPanel("chars")}
-                title="主控人设"
-                style={{ display: "flex", alignItems: "center", gap: isMobile ? 0 : 5, justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${hpUi.line}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : hpUi.controlBg, color: hpUi.chromeMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
-              >
-                <I.User />
-                {!isMobile && <span>人设</span>}
-              </button>
-            )}
-            {HP_KIOSK && (
-              <button
-                onClick={() => setPanel("settings")}
-                title="配置（API Key）"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 0 : "5px 9px", width: isMobile ? 34 : "auto", height: isMobile ? 34 : "auto", border: isMobile ? "none" : `1px solid ${hpUi.line}`, borderRadius: isMobile ? 12 : 999, background: isMobile ? "transparent" : hpUi.controlBg, color: hpUi.chromeMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
-              >
-                <I.Settings />
-              </button>
-            )}
-
-            {!HP_KIOSK && (
+          <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, overflow: "hidden" }}>
               <>
                 {!isMobile && (
                   <span title={currentCanonBeat ? `${currentCanonBeat.part}｜原著：${currentCanonBeat.event}` : "当前时间"}
@@ -1884,13 +1961,13 @@ ${transcriptLines(chunk)}`;
                   <I.Plus />{!isMobile && "对话"}
                 </button>
               </>
-            )}
           </div>
         </div>
+        )}
 
         {/* Messages */}
-        <div style={{ flex: 1, overflow: "auto", background: HP_KIOSK ? hpUi.stageBg : V.chatBackdrop }}>
-          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: isMobile ? "20px 10px 24px" : "34px 26px 38px" }}>
+        <div style={{ flex: 1, overflow: "auto", position: "relative", zIndex: 1, background: HP_KIOSK ? hpUi.stageBg : V.chatBackdrop }}>
+          <div style={{ maxWidth: HP_KIOSK ? 650 : 900, width: "100%", margin: "0 auto", padding: HP_KIOSK ? (isMobile ? "18px 14px 22px" : "26px 20px 32px") : (isMobile ? "20px 10px 24px" : "34px 26px 38px") }}>
           {messages.length === 0 && HP_KIOSK && (
             <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: hpUi.emptyText, fontSize: 14, lineHeight: 1.7 }}>
               {config.apiKey ? "在下方描述你的行动，开启 1991 学年。" : "先在右上角配置 API Key。"}
@@ -1971,7 +2048,7 @@ ${transcriptLines(chunk)}`;
                   <article
                     style={{
                       width: "100%",
-                      maxWidth: isUser ? 760 : 840,
+                      maxWidth: isUser ? 590 : 620,
                       margin: isMobile ? "0 auto 18px" : "0 auto 24px",
                       animation: "fadeUp 0.18s ease",
                     }}
@@ -1980,24 +2057,30 @@ ${transcriptLines(chunk)}`;
                       style={{
                         position: "relative",
                         boxSizing: "border-box",
-                        padding: isMobile ? "18px 17px 16px" : "22px 24px 20px",
-                        border: `1.2px solid ${frameInk}`,
-                        borderRadius: isMobile ? 12 : 14,
+                        padding: isMobile ? "34px 26px 28px" : "42px 34px 34px",
+                        border: hpIsNight ? `1.2px solid ${frameInk}` : `1px solid ${hpUi.inputBorder}`,
+                        borderRadius: hpIsNight ? (isMobile ? 12 : 14) : 8,
                         background: hpUi.cardBg,
                         color: hpUi.cardText,
                         boxShadow: hpUi.cardShadow,
                         overflow: "hidden",
                       }}
                     >
-                      <CornerFlourish pos="tl" color={frameInk} size={isMobile ? 24 : 30} />
-                      <CornerFlourish pos="tr" color={frameInk} size={isMobile ? 24 : 30} />
-                      <CornerFlourish pos="br" color={frameInk} size={isMobile ? 24 : 30} />
-                      <CornerFlourish pos="bl" color={frameInk} size={isMobile ? 24 : 30} />
+                      {!hpIsNight && (
+                        <>
+                          <span style={{ position: "absolute", inset: 8, border: `1px solid ${hpUi.line}`, borderRadius: 5, pointerEvents: "none" }} />
+                          <span style={{ position: "absolute", inset: "15px 18px", border: `1px solid rgba(142,128,100,0.18)`, borderRadius: 3, pointerEvents: "none" }} />
+                          <span style={{ position: "absolute", top: 24, left: 46, right: 46, height: 1, background: `linear-gradient(90deg, transparent, ${frameInk}, transparent)`, opacity: 0.22 }} />
+                          <span style={{ position: "absolute", bottom: 24, left: 46, right: 46, height: 1, background: `linear-gradient(90deg, transparent, ${frameInk}, transparent)`, opacity: 0.18 }} />
+                        </>
+                      )}
                       <div style={{ position: "relative", zIndex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                          <span style={{ height: 1, width: 26, background: `linear-gradient(90deg, transparent, ${frameInk})`, opacity: 0.62 }} />
-                          <span style={{ fontFamily: V.serif, color: frameInk, fontSize: 12, fontWeight: 900, letterSpacing: 2.2 }}>{label}</span>
-                          <span style={{ height: 1, flex: 1, background: `linear-gradient(90deg, ${frameInk}, transparent)`, opacity: 0.28 }} />
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 12, marginBottom: isMobile ? 24 : 30 }}>
+                          <span style={{ height: 1, background: `linear-gradient(90deg, transparent, ${frameInk})`, opacity: hpIsNight ? 0.62 : 0.42 }} />
+                          <span style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: V.serif, color: frameInk, fontSize: isMobile ? 16 : 18, fontWeight: 700, letterSpacing: 6 }}>
+                            <span style={{ fontSize: 10, letterSpacing: 0 }}>◆</span>{label}<span style={{ fontSize: 10, letterSpacing: 0 }}>◆</span>
+                          </span>
+                          <span style={{ height: 1, background: `linear-gradient(90deg, ${frameInk}, transparent)`, opacity: hpIsNight ? 0.28 : 0.42 }} />
                         </div>
                         {m.attachments?.length > 0 && (
                           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
@@ -2016,7 +2099,7 @@ ${transcriptLines(chunk)}`;
                             style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${hpUi.line}`, borderRadius: 10, background: hpUi.inputPaper, color: hpUi.inputInk, fontSize: 14, fontFamily: "inherit", lineHeight: 1.65, padding: "9px 11px", resize: "vertical", outline: "none" }}
                           />
                         ) : (
-                          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: isUser ? 14 : 14.5, lineHeight: isMobile ? 1.72 : 1.82, fontFamily: V.serif }}>
+                          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: isMobile ? 17 : 18, lineHeight: isMobile ? 1.95 : 2.05, fontFamily: V.serif, fontWeight: 500 }}>
                             {typeof displayText === "string" ? displayText : typeof m.content === "string" ? m.content : "[多模态消息]"}
                             {m.streaming && <span style={{ opacity: 0.55, animation: "blink 1s infinite" }}>▋</span>}
                           </div>
@@ -2132,7 +2215,7 @@ ${transcriptLines(chunk)}`;
 
         {/* World book hint */}
         {triggered.length > 0 && input && (
-          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: "0 14px 6px" }}>
+          <div style={{ maxWidth: HP_KIOSK ? 650 : 900, width: "100%", margin: "0 auto", padding: "0 14px 6px" }}>
             <div style={{ padding: "5px 10px", background: T.greenBg, border: `1px solid ${T.greenBorder}`, borderRadius: 7, fontSize: 11, color: T.greenText }}>
               🌍 世界书触发：{triggered.map((e) => e.title).join("、")}
             </div>
@@ -2141,7 +2224,7 @@ ${transcriptLines(chunk)}`;
 
         {/* Attachment chips */}
         {attachments.length > 0 && (
-          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto", display: "flex", gap: 6, padding: "0 14px 6px", flexWrap: "wrap" }}>
+          <div style={{ maxWidth: HP_KIOSK ? 650 : 900, width: "100%", margin: "0 auto", display: "flex", gap: 6, padding: "0 14px 6px", flexWrap: "wrap" }}>
             {attachments.map((a, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 9px", background: T.surface, borderRadius: 20, fontSize: 11, color: T.textDim }}>
                 📎 {a.name}
@@ -2154,8 +2237,8 @@ ${transcriptLines(chunk)}`;
         )}
 
         {/* Input bar */}
-        <div style={{ borderTop: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.inputBar : V.inputBar, padding: isMobile ? "8px 10px calc(10px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))" }}>
-          <div style={{ maxWidth: 900, width: "100%", margin: "0 auto" }}>
+        <div style={{ borderTop: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.inputBar : V.inputBar, padding: isMobile ? "8px 10px calc(10px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))", position: "relative", zIndex: 1 }}>
+          <div style={{ maxWidth: HP_KIOSK ? 650 : 900, width: "100%", margin: "0 auto" }}>
           {HP_KIOSK && activeMode === "world" && currentCalendarMoment && !input.trim() && (
             <div
               style={{
@@ -2245,14 +2328,6 @@ ${transcriptLines(chunk)}`;
             boxShadow: HP_KIOSK ? (hpIsNight ? "0 14px 34px rgba(0,0,0,0.28), inset 0 0 0 4px rgba(255,246,219,0.18)" : "0 12px 28px rgba(89,54,32,0.18), inset 0 0 0 4px rgba(255,246,219,0.24)") : undefined,
             overflow: "hidden",
           }}>
-            {HP_KIOSK && (
-              <>
-                <CornerFlourish pos="tl" color={hpUi.flourishInk} size={22} />
-                <CornerFlourish pos="tr" color={hpUi.flourishInk} size={22} />
-                <CornerFlourish pos="br" color={hpUi.flourishInk} size={22} />
-                <CornerFlourish pos="bl" color={hpUi.flourishInk} size={22} />
-              </>
-            )}
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => handleFiles(Array.from(e.target.files))} />
             <button onClick={() => fileRef.current?.click()} style={{ position: "relative", zIndex: 1, background: "none", border: "none", cursor: "pointer", color: HP_KIOSK ? hpUi.flourishInk : V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
               <I.Attach />
