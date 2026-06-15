@@ -7,11 +7,14 @@
  */
 
 export const FAVOR_MAX = 100;
+export const CONFESSION_THRESHOLD = 60;
 
 /** 好感度 → 阶段。 */
-export function favorStage(v) {
+export function favorStage(v, relationship = null) {
+  const status = relationship?.status || relationship?.stage || "";
+  if (status === "恋人") return "恋人";
   const n = Number(v || 0);
-  if (n >= 60) return "恋人";
+  if (n >= CONFESSION_THRESHOLD) return "心动";
   if (n >= 41) return "亲密朋友";
   if (n >= 21) return "朋友";
   return "陌生";
@@ -46,7 +49,7 @@ export function formatFavorBlock(favor = {}, nameById = {}) {
     .map(([id, v]) => `${nameById[id] || id}：${favorStage(v)}（好感度 ${Math.round(v)}）`);
   if (!lines.length) return null;
   return (
-    "【玩家与角色的好感度（据此体现亲疏；不得自行宣布关系跨级升级，如未告白就变恋人）】\n- " +
+    "【玩家与角色的好感度（据此体现亲疏；不得自行宣布关系跨级升级；好感度≥60只是心动/可告白，不等于恋人）】\n- " +
     lines.join("\n- ")
   );
 }
@@ -55,6 +58,81 @@ export function formatFavorBlock(favor = {}, nameById = {}) {
 export function socialAnchor(targetName, newFavor) {
   return (
     `社交对象：${targetName}，当前好感度 ${Math.round(newFavor)}（${favorStage(newFavor)}）。` +
-    `请按此亲疏自然演绎这次社交的结果；好感度变化已由系统结算，你不得自行宣布关系跨级升级。`
+    `请按此亲疏自然演绎这次社交的结果；好感度变化已由系统结算，你不得自行宣布关系跨级升级。若达到心动，也必须等系统告白结果才能成为恋人。`
+  );
+}
+
+const REL_LIMIT = 3;
+
+/** AI 只能建议日常关系小幅变化，系统解析、限幅并清洗标签。 */
+export function parseRelationshipDeltas(text, characters = [], ocs = []) {
+  const raw = String(text || "");
+  const entries = [];
+  const cleaned = raw.replace(/【关系变化[:：]([^】]+)】/g, (_, body) => {
+    const parts = String(body || "").split(/[；;、，,\n]+/);
+    for (const part of parts) {
+      const m = part.trim().match(/^(.{1,18}?)([+-＋－])\s*(\d{1,2})(?:\s*[:：]\s*(.{1,40}))?$/);
+      if (!m) continue;
+      const target = findCharacter(m[1].trim(), characters, ocs);
+      if (!target) continue;
+      const sign = m[2] === "-" || m[2] === "－" ? -1 : 1;
+      const delta = Math.max(-REL_LIMIT, Math.min(REL_LIMIT, sign * Number(m[3])));
+      if (delta) entries.push({ id: target.id, name: target.name, kind: target.kind, delta, note: (m[4] || "").trim() });
+    }
+    return "";
+  }).replace(/\n{3,}/g, "\n\n").trim();
+
+  return { cleaned, entries };
+}
+
+export function applyRelationshipDeltas(player, entries = []) {
+  const next = {
+    ...player,
+    favor: { ...(player?.favor || {}) },
+    state: {
+      ...(player?.state || {}),
+      relationships: { ...(player?.state?.relationships || {}) },
+    },
+  };
+  const applied = [];
+
+  for (const entry of entries) {
+    const oldValue = Number(next.favor[entry.id] || 0);
+    const value = Math.max(0, Math.min(FAVOR_MAX, oldValue + entry.delta));
+    next.favor[entry.id] = value;
+
+    const rel = next.state.relationships[entry.id] || {};
+    next.state.relationships[entry.id] = {
+      ...rel,
+      status: rel.status === "恋人" ? "恋人" : favorStage(value),
+      feeling: entry.note || rel.feeling || "",
+      updatedAt: Date.now(),
+    };
+    applied.push({ ...entry, oldValue, value, stage: favorStage(value, next.state.relationships[entry.id]) });
+  }
+
+  return { player: next, applied };
+}
+
+export function formatRelationshipDeltaLine(applied = []) {
+  if (!applied.length) return "";
+  return "💛 关系变化：" + applied
+    .map((x) => `${x.name} ${x.delta > 0 ? "+" : ""}${x.delta} → ${Math.round(x.value)}（${x.stage}）`)
+    .join(" · ");
+}
+
+export function relationshipRulesBlock(characters = [], ocs = []) {
+  const names = [
+    ...(characters || []).map((c) => c.name).filter(Boolean),
+    ...(ocs || []).map((o) => o.name).filter(Boolean),
+  ].slice(0, 80);
+  return (
+    "【关系与好感度规则】\n" +
+    "- 好感度只由系统结算；你不得在正文中自行宣布数值、关系跨级、恋人关系或婚约。\n" +
+    "- 普通日常里，如果本轮确实发生了具体社交变化，可在回复最后单独写一行结构化标签：`【关系变化：角色名+1；角色名-1】`。\n" +
+    "- 只有明确互动才写；擦肩而过、远远看见、单方面猜测通常不写。\n" +
+    "- 日常关系变化保持小幅：普通友好/尴尬通常 ±1，明显互助/冲突 ±2，强烈共同经历最多 ±3。\n" +
+    "- 好感度≥60 只是心动/可告白，不等于恋人；恋人必须由系统告白结算成功后才成立。\n" +
+    "- 可识别角色名：" + (names.join("、") || "当前暂无") + "。"
   );
 }

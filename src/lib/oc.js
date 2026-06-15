@@ -20,6 +20,7 @@ export function createOC(partial = {}) {
     persona: String(partial.persona || "").trim(),       // 性格 / 设定
     tieName: partial.tieName || "",        // 关联的原著角色名（可空）
     tieRelation: partial.tieRelation || "", // 关系类型
+    romanceable: partial.romanceable !== false,
     createdAt: partial.createdAt || Date.now(),
   };
 }
@@ -37,6 +38,7 @@ export function formatOcs(ocs) {
       if (o.appearance) lines.push(`相貌：${o.appearance}`);
       if (o.persona) lines.push(`性格 / 设定：${o.persona}`);
       if (o.tieName) lines.push(`与原著角色的关系：${o.tieName} 的${o.tieRelation || "熟人"}`);
+      lines.push(`互动定位：可参与日常、可积累好感${o.romanceable === false ? "" : "、可攻略/可进入结局素材"}；不得改写原著主线。`);
       return lines.join("\n");
     });
   return cards.length ? cards.join("\n\n") : null;
@@ -46,5 +48,6 @@ export function formatOcs(ocs) {
 export const OC_GUARD =
   "【原创角色规则】上述原创角色是玩家加入这个世界的普通成员。请按其设定自然扮演 TA；" +
   "当你扮演与其有关系的原著角色时，依该关系自然对待 TA（如『德拉科的发小』，德拉科会与其熟络）。" +
+  "OC 与原著角色共用好感度、告白和结局素材规则，可以参与日常、支线与情感发展。" +
   "但原创角色及其关系仅在日常 / 社交层面生效——不得改变原著大事件、主线走向与原著角色的既定命运，" +
   "也不得让原创角色凌驾于原著设定之上。";

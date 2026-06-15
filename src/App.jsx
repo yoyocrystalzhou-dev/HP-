@@ -35,13 +35,18 @@ import { PRESETS, GENERATIONS } from "./presets/index.js";
 import { instantiatePreset, presetProjectId } from "./lib/loadPreset.js";
 import { currentBeat, canonAnchor, phaseName, advanceTime, labelSortKey } from "./lib/timeline.js";
 import { initialStats, formatStatsLine, GATING_RULES, STAMINA_MAX } from "./lib/stats.js";
-import { initialCourses, formatCoursesBlock, COURSES, normalizeCourses } from "./lib/courses.js";
-import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects, examGrade } from "./lib/checks.js";
+import { initialCourses, formatCoursesBlock } from "./lib/courses.js";
+import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects } from "./lib/checks.js";
 import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
-import { favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor } from "./lib/affinity.js";
+import {
+  favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor,
+  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock,
+} from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
-import { dayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
+import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
+import { dayPeriod, nextDayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
+import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor } from "./lib/lifeMechanics.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -157,10 +162,20 @@ export default function App() {
     ...projectChars.map((c) => [c.id, c.name]),
     ...((activeProject?.ocs || []).map((o) => [o.id, o.name])),
   ]);
-  const favorList     = Object.entries(player.favor || {})
-    .filter(([, v]) => Number(v) > 0)
-    .map(([id, v]) => ({ name: charNameById[id] || id, value: v }))
-    .sort((a, b) => b.value - a.value);
+  const favorList     = [
+    ...Object.entries(player.favor || {})
+      .filter(([, v]) => Number(v) > 0)
+      .map(([id, v]) => ({
+        id,
+        name: charNameById[id] || id,
+        value: v,
+        relationship: player.state?.relationships?.[id] || null,
+        kind: (activeProject?.ocs || []).some((o) => o.id === id) ? "oc" : "canon",
+      })),
+    ...((activeProject?.ocs || [])
+      .filter((o) => !(player.favor || {})[o.id])
+      .map((o) => ({ id: o.id, name: o.name, value: 0, relationship: player.state?.relationships?.[o.id] || null, kind: "oc" }))),
+  ].sort((a, b) => b.value - a.value || (a.kind === "oc" ? -1 : 1));
   const activeMode    = HP_KIOSK ? "world" : (activeProject?.activeMode || "world");
   const activeCharId  = activeProject?.activeCharId || null;
   const activeChar    = projectChars.find((c) => c.id === activeCharId) || projectChars[0] || DEFAULT_CHAR;
@@ -236,7 +251,10 @@ export default function App() {
       setTimeout(() => setStatus(""), 3000);
       return;
     }
-    const text = buildCalendarChoiceInput(option, scenePeriod, activeProject?.currentTimeLabel);
+    const text = [
+      buildCalendarChoiceInput(option, scenePeriod, activeProject?.currentTimeLabel),
+      buildCalendarLifeContext(option, scenePeriod, activeProject?.currentTimeLabel, activeProject?.currentState, storyMemory, worldMemory),
+    ].filter(Boolean).join("\n\n");
     if (option.nextTimeLabel || option.nextPeriodId) {
       patchProject((p) => ({
         ...p,
@@ -250,7 +268,8 @@ export default function App() {
       display: option.label,
       hiddenText: text,
       kind: "calendarChoice",
-      disableActions: true,
+      disableActions: !["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label),
+      advancePeriod: !(option.nextTimeLabel || option.nextPeriodId),
     });
   };
 
@@ -322,7 +341,21 @@ export default function App() {
     patchProject((p) => ({ ...p, ocs: [...(p.ocs || []), createOC(oc)] }));
     setOcCreatorOpen(false);
   };
-  const removeOc = (id) => patchProject((p) => ({ ...p, ocs: (p.ocs || []).filter((o) => o.id !== id) }));
+  const removeOc = (id) => patchProject((p) => {
+    const pc = p.playerCharacter || {};
+    const { [id]: _favor, ...favor } = pc.favor || {};
+    const relationships = { ...(pc.state?.relationships || {}) };
+    delete relationships[id];
+    return {
+      ...p,
+      ocs: (p.ocs || []).filter((o) => o.id !== id),
+      playerCharacter: {
+        ...pc,
+        favor,
+        state: { ...(pc.state || {}), relationships },
+      },
+    };
+  });
 
   // P-G：重新开始（清除当前世代存档 → 重新创建角色）
   const restartGame = () => {
@@ -607,7 +640,17 @@ export default function App() {
     });
     const csFmt = formatCurrentState(csVisible, { nameMap });
     if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
-    if (HP_KIOSK && activeMode === "world") parts.push(formatCalendarPeriodBlock(scenePeriod));
+    if (HP_KIOSK && activeMode === "world") {
+      parts.push(formatCalendarPeriodBlock(scenePeriod));
+      parts.push(buildHogwartsLifeContext({
+        userText,
+        period: scenePeriod,
+        currentTimeLabel: activeProject?.currentTimeLabel,
+        currentState: activeProject?.currentState,
+        storyMemory,
+        worldMemory,
+      }));
+    }
     // HP 专项：注入当前时间对应的原著剧情锚点（防跑偏）。位于硬规则之下、当前状态之上。
     if (currentCanonBeat) parts.push(canonAnchor(currentCanonBeat));
     if (csFmt.stateLines.length) parts.push(`【当前剧情状态】\n${csFmt.stateLines.join("\n")}`);
@@ -640,9 +683,11 @@ export default function App() {
       ]);
       const favorBlock = formatFavorBlock(player.favor, favorNameById);
       if (favorBlock) parts.push(favorBlock);
+      parts.push(relationshipRulesBlock(projectChars, activeProject?.ocs));
       // HP 专项：注入玩家数值 + 数值/好感度门槛裁决规则（防止自由叙述空口越过数值门槛）
       if (player.stats) { parts.push(formatStatsLine(player.stats)); parts.push(formatCoursesBlock(player.courses)); parts.push(GATING_RULES); }
       parts.push(LIFE_SCENE_RULES);
+      parts.push(LIFE_SCENE_ENGINE_RULES);
       parts.push(DAILY_GROWTH_RULES);
       // Player character — the user's own role in the world.
       const pseg = [`【玩家角色（用户扮演）：${player.name}】`];
@@ -950,10 +995,17 @@ ${transcriptLines(chunk)}`;
         });
       });
 
-      const allowDailyGrowth = HP_KIOSK && activeMode === "world" && player?.stats && !parseActionCommand(promptText);
+      const lastUserForMechanics = baseMessages[baseMessages.length - 1] || {};
+      const cmdForReply = lastUserForMechanics.mechanicCommand || parseActionCommand(promptText);
+      const allowDailyGrowth = HP_KIOSK && activeMode === "world" && player?.stats && !cmdForReply;
+      const allowRelationshipDeltas = HP_KIOSK && activeMode === "world" && !cmdForReply;
       const daily = allowDailyGrowth ? parseDailyGrowth(finalText) : { cleaned: finalText, entries: [] };
-      const visibleText = daily.cleaned || finalText;
+      const relationship = allowRelationshipDeltas
+        ? parseRelationshipDeltas(daily.cleaned || finalText, projectChars, activeProject?.ocs || [])
+        : { cleaned: daily.cleaned || finalText, entries: [] };
+      const visibleText = relationship.cleaned || daily.cleaned || finalText;
       const dailyGrowthLine = formatDailyGrowth(daily.entries);
+      let relationshipLine = "";
 
       if (daily.entries.length) {
         patchProject((p) => {
@@ -961,16 +1013,34 @@ ${transcriptLines(chunk)}`;
           return { ...p, playerCharacter: { ...pc, stats: applyDailyGrowth(pc.stats, daily.entries) } };
         });
       }
+      if (relationship.entries.length) {
+        const appliedPreview = applyRelationshipDeltas(player, relationship.entries).applied;
+        patchProject((p) => {
+          const pc = p.playerCharacter || {};
+          const result = applyRelationshipDeltas(pc, relationship.entries);
+          return { ...p, playerCharacter: result.player };
+        });
+        relationshipLine = formatRelationshipDeltaLine(appliedPreview);
+      }
+      const rollLine = [dailyGrowthLine, relationshipLine].filter(Boolean).join("   ");
 
       setSessions((prev) => {
         const s = prev[sid];
         if (!s) return prev;
         return {
           ...prev,
-          [sid]: { ...s, messages: s.messages.map((m) => m.id === aid ? { ...m, content: visibleText, roll: dailyGrowthLine || null, streaming: false } : m) },
+          [sid]: { ...s, messages: s.messages.map((m) => m.id === aid ? { ...m, content: visibleText, roll: rollLine || null, streaming: false } : m) },
         };
       });
-      const completedMessages = [...baseMessages, { role: "assistant", content: visibleText, id: aid, roll: dailyGrowthLine || null, streaming: false }];
+      const completedMessages = [...baseMessages, { role: "assistant", content: visibleText, id: aid, roll: rollLine || null, streaming: false }];
+
+      if (HP_KIOSK && activeMode === "world" && lastUserForMechanics.advancePeriod) {
+        patchProject((p) => {
+          const current = p.dayPeriod || "morning";
+          const next = nextDayPeriod(current);
+          return next === current ? p : { ...p, dayPeriod: next };
+        });
+      }
 
       // HP 专项：原著时间线自动推进（混合节奏，仅世界模式 + HP 预设）。基于 prev 状态结算，防陈旧。
       if (activePreset && activeMode === "world" && canonTimeline.length) {
@@ -1032,10 +1102,15 @@ ${transcriptLines(chunk)}`;
 
     // HP 专项：行动指令（/练咒 …）→ 透明检定。普通对话不触发。
     let actionAnchor = null, rollLine = null;
-    const cmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
+    const explicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
+    const naturalCmd = !explicitCmd && !disableActions && HP_KIOSK && activeMode === "world"
+      ? inferNaturalCommand(`${text}\n${hiddenText}`, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel })
+      : null;
+    const cmd = explicitCmd || naturalCmd;
+    let advancePeriodAfterReply = draft?.advancePeriod ?? shouldAdvancePeriod({ messageKind, command: cmd?.command });
     if (cmd && player?.stats) {
       const stamina = Number(player.stats.stamina ?? STAMINA_MAX);
-      const cost = cmd.action.cost || 10;
+      const cost = adjustedActionCost(cmd.action, scenePeriodId);
 
       if (cmd.action.rest) {
         // 休息：体力全恢复（时间会随回合自然推进）
@@ -1055,38 +1130,63 @@ ${transcriptLines(chunk)}`;
           actionAnchor = `【告白结果（旁白必须据此叙事，不得改判）】玩家向 ${tgt.name} 告白，当前好感度 ${fav}。` +
             (ok ? "已达恋人阈值（≥60），对方接受，二人正式成为恋人。" : "未达恋人阈值（<60），对方婉拒或回避，但不必撕破脸。") +
             "请自然演绎这一刻。";
+          if (ok) {
+            patchProject((p) => {
+              const pc = p.playerCharacter || {};
+              const state = { ...(pc.state || {}), relationships: { ...(pc.state?.relationships || {}) } };
+              state.relationships[tgt.id] = {
+                ...(state.relationships[tgt.id] || {}),
+                status: "恋人",
+                feeling: "告白成功，关系正式确认。",
+                updatedAt: Date.now(),
+              };
+              return { ...p, playerCharacter: { ...pc, state } };
+            });
+          }
         } else {
           rollLine = `💗 告白 —— 未指定对象`;
           actionAnchor = "【告白】玩家发起告白但未指明对象，请让其先明确心意所向。";
         }
       } else if (cmd.action.exam) {
         // 期末考试：各科课程值 → 等级 O/E/A/P/D/T
-        const cs = normalizeCourses(player.courses);
-        const subs = player.meta?.subjects || [];
-        const results = COURSES.map((s) => ({ s, g: examGrade(cs[s], subs.includes(s)) }));
-        const hp = results.reduce((a, r) => a + ({ O: 10, E: 6, A: 3, P: 0, D: -2, T: -5 }[r.g] || 0), 0);
-        rollLine = `📜 期末成绩：` + results.map((r) => `${r.s.replace(" / 魁地奇", "")} ${r.g}`).join(" · ") + `  ·  学院分 ${hp >= 0 ? "+" : ""}${hp}`;
-        actionAnchor = `【期末考试结果（旁白必须据此宣布，不得改判等级）】\n` +
-          results.map((r) => `${r.s}：${r.g}`).join("\n") +
-          `\n（等级：O 优秀 / E 超出预期 / A 及格 / P 较差 / D 糟糕 / T 巨魔）\n学院分变化 ${hp >= 0 ? "+" : ""}${hp}。请描写考试与发榜场景，符合各科水平。`;
-        patchProject((p) => {
-          const pc = p.playerCharacter || {};
-          const stats = { ...(pc.stats || {}) };
-          stats.housePoints = Math.max(0, (stats.housePoints || 0) + hp);
-          return { ...p, playerCharacter: { ...pc, stats } };
-        });
+        const settlement = settleExam(player, activeProject?.currentTimeLabel);
+        const existing = activeProject?.examResults?.[settlement.key] || null;
+        const results = existing?.results || settlement.results;
+        const hp = Number(existing?.hp ?? settlement.hp);
+        rollLine = formatExamLine(results, hp) + (existing ? " · 已结算" : "");
+        actionAnchor = examAnchor(results, hp, { repeated: !!existing });
+        if (!existing) {
+          patchProject((p) => {
+            const pc = p.playerCharacter || {};
+            const stats = { ...(pc.stats || {}) };
+            stats.housePoints = Math.max(0, (stats.housePoints || 0) + hp);
+            return {
+              ...p,
+              examResults: { ...(p.examResults || {}), [settlement.key]: { results, hp, settledAt: Date.now() } },
+              playerCharacter: { ...pc, stats },
+            };
+          });
+        }
       } else if (cmd.action.ending) {
         // 结局：AI 依终值多元生成，不写死
         rollLine = `🌅 命运的纺线开始编织……`;
         actionAnchor = "【结局生成（开放 · 多元，禁止套用固定模板）】请依据玩家七年的全部数据——养成数值、各科课程、好感度与关系、学院分、原创角色——" +
           "为 TA 生成一段专属的「十九年后」尾声：职业去向、与重要角色（含 OC）的情感归宿、生活图景。要个性化、贴合其数值与选择，可圆满可有遗憾，不必皆大欢喜。";
+      } else if (cmd.blockedReason) {
+        rollLine = `⚠️ 条件不合适：${cmd.action.label}`;
+        actionAnchor = `【行动条件不足（旁白必须据此叙事，不得掷骰判成败）】\n` +
+          `玩家想尝试：${cmd.action.label}${cmd.target ? `（${cmd.target}）` : ""}\n` +
+          `当前地点/时间不适合：${cmd.blockedReason}\n` +
+          `请自然叙述 TA 为什么暂时不能这样做，并给出世界内合理的替代方向（例如换到合适地点、等待课程、准备器材、找教授许可），不要扣体力、不要产生数值收益或失败惩罚。`;
+        advancePeriodAfterReply = false;
       } else if (stamina < cost) {
         // 体力不足：行动受阻，不掷骰、不结算
-        rollLine = `⚠️ 体力不足 ${stamina}/${cost} —— 先 /休息 恢复`;
+        rollLine = `⚠️ 体力不足 ${stamina}/${cost} —— 先休息恢复`;
         actionAnchor = `【行动受阻】玩家体力不足（当前 ${stamina}，需 ${cost}），无法完成「${cmd.action.label}」。请叙述其疲惫、力不从心、需要休息；本次不成功，不产生任何数值或好感度变化。`;
+        advancePeriodAfterReply = false;
       } else {
         const check = runAction(cmd.action, player);
-        rollLine = formatRoll(cmd.action, check) + `  ·  体力 -${cost}`;
+        rollLine = `${cmd.inferred ? "🎲 自动判定 · " : ""}${formatRoll(cmd.action, check)}  ·  体力 -${cost}`;
         const deduct = (stats) => { stats.stamina = Math.max(0, (stats.stamina ?? STAMINA_MAX) - cost); };
 
         if (cmd.action.social) {
@@ -1147,6 +1247,8 @@ ${transcriptLines(chunk)}`;
       role: "user", content,
       display: displayText,
       kind: messageKind,
+      mechanicCommand: cmd ? { command: cmd.command, inferred: !!cmd.inferred } : null,
+      advancePeriod: advancePeriodAfterReply,
       roll: rollLine || null, // 检定/状态变化，渲染为独立居中状态条（不进气泡、不发给 AI）
       attachments: curAtts.map((a) => ({ name: a.name })),
     };

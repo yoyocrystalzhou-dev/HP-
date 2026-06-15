@@ -122,12 +122,15 @@ export default function StatusBar({ player, variant = "rail", onClose, ocs = [],
           {favorList.map((f) => (
             <div key={f.name} style={{ marginBottom: 7 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 3 }}>
-                <span style={{ color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-                <span style={{ color: MUTED, flexShrink: 0, marginLeft: 6 }}>{favorStage(f.value)} {Math.round(f.value)}</span>
+                <span style={{ color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}{f.kind === "oc" ? <span style={{ color: GOLD, fontSize: 10, marginLeft: 4 }}>OC</span> : null}</span>
+                <span style={{ color: MUTED, flexShrink: 0, marginLeft: 6 }}>{favorStage(f.value, f.relationship)} {Math.round(f.value)}</span>
               </div>
               <div style={{ height: 5, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
                 <div style={{ width: `${Math.max(0, Math.min(100, f.value))}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg, #b5566f, #e88aa3)" }} />
               </div>
+              {f.relationship?.feeling && (
+                <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3, lineHeight: 1.35 }}>{f.relationship.feeling}</div>
+              )}
             </div>
           ))}
         </div>

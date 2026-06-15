@@ -2,7 +2,8 @@
  * 判定引擎（HP 专项 · 透明裁决层）。
  *
  * 原则：成败由程序掷骰 + 数值决定，AI 只负责沉浸叙事。掷骰透明可见。
- * 只有玩家主动发起「行动/指令」才触发检定；自由对话不掷骰。
+ * 只有玩家主动发起「行动/指令」或自然写出明确尝试/风险时才触发检定；
+ * 普通闲聊和纯观察不掷骰。
  *
  * 纯逻辑、无副作用（除可注入的 rng，默认 Math.random）。
  */
@@ -20,8 +21,10 @@ export const ACTIONS = {
   草药: { label: "草药学", stat: "academic", statLabel: "学术", difficulty: 21, subject: "草药学", cost: 12 },
   防御: { label: "黑魔法防御", stat: "courage", statLabel: "勇气", difficulty: 23, subject: "黑魔法防御术", cost: 14 },
   飞行: { label: "飞行 / 魁地奇", stat: "agility", statLabel: "敏捷", difficulty: 20, subject: "飞行 / 魁地奇", cost: 18 },
-  夜游: { label: "夜间探索", stat: "courage", statLabel: "勇气", difficulty: 25, risky: true, cost: 25 },
+  夜游: { label: "夜间 / 违规探索", stat: "courage", statLabel: "勇气", difficulty: 25, risky: true, cost: 25 },
   社交: { label: "社交", stat: "affinity", statLabel: "亲和", difficulty: 16, social: true, cost: 8 },
+  课堂: { label: "课堂表现", stat: "academic", statLabel: "学术", difficulty: 18, subject: null, cost: 8, classEvent: true },
+  冲突: { label: "冲突处理", stat: "courage", statLabel: "勇气", difficulty: 20, risky: true, cost: 10 },
   休息: { label: "休息", rest: true },
   告白: { label: "告白", confess: true },
   考试: { label: "期末考试", exam: true },
@@ -31,7 +34,8 @@ export const ACTIONS = {
 /** 指令别名 → 标准 command（方便玩家少打字）。 */
 const ALIASES = {
   施法: "练咒", 咒语: "练咒", 魔咒: "练咒", 魁地奇: "飞行", 黑魔法防御术: "防御",
-  搭讪: "社交", 聊天: "社交", 睡觉: "休息", 睡眠: "休息", 补眠: "休息",
+  搭讪: "社交", 聊天: "社交", 回答: "课堂", 课堂: "课堂", 对峙: "冲突",
+  睡觉: "休息", 睡眠: "休息", 补眠: "休息",
   表白: "告白", 期末: "考试", 大结局: "结局", 尾声: "结局",
 };
 
