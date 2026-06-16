@@ -378,7 +378,8 @@ export default function App() {
       kind: "calendarChoice",
       growth: option.growth || null,
       disableActions: !(option.mechanic === "课堂" || ["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label)),
-      advancePeriod: option.advancePeriod ?? !(option.nextTimeLabel || option.nextPeriodId),
+      // 日常活动选项不再自动消耗时段；时段推进交给「下一时段」按钮。带时间跳转的选项（快进/休息/换学年）在上面已直接改写时间。
+      advancePeriod: option.advancePeriod ?? false,
     });
   };
 

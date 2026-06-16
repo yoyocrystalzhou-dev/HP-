@@ -227,9 +227,10 @@ export function inventoryIssueForCommand(cmd, inventory) {
   return "";
 }
 
-export function shouldAdvancePeriod({ messageKind, command }) {
-  if (messageKind === "calendarChoice") return true;
-  return !!command && !["休息", "告白", "结局"].includes(command);
+export function shouldAdvancePeriod() {
+  // 时段推进完全由玩家手动控制：「下一时段 / 睡到明早」按钮、休息、快进或带时间跳转的选项。
+  // 普通对话、行动检定、日常活动都不再自动消耗时段——避免「说一句话就跳到下一时段」。
+  return false;
 }
 
 export function examKeyForTime(currentTimeLabel = "") {
