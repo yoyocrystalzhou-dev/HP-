@@ -234,6 +234,9 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
     { id: "ron", name: "罗恩·韦斯莱" },
     { id: "hermione", name: "赫敏·格兰杰" },
     { id: "draco", name: "德拉科·马尔福" },
+    { id: "bellatrix", name: "贝拉特里克斯·莱斯特兰奇" },
+    { id: "albus", name: "阿不思·珀西瓦尔·伍尔弗里克·布赖恩·邓布利多" },
+    { id: "hagrid", name: "鲁伯·海格" },
   ];
   const inferred = inferFavorDeltas("我向他们打招呼，问能不能一起坐。", cast, [], {
     aiText: "哈利：当然可以。罗恩笑着挪开书包，赫敏抬头回应你的问题。",
@@ -276,6 +279,27 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
     aiText: "罗恩把书包挪开，让你坐下。",
   });
   ok(filteredHiddenOnly.length === 1 && filteredHiddenOnly[0].id === "ron", "hidden-only relationship tag for unmentioned character is filtered out");
+
+  const familyNameOnly = inferFavorDeltas("我跟着拉环离开金库。", cast, [], {
+    aiText: "拉环头也不回地说：那是莱斯特兰奇家的金库守卫龙。矿车重新回到大厅。",
+    maxEntries: 4,
+  });
+  ok(!familyNameOnly.some((x) => x.id === "bellatrix"), "family surname mention does not infer Bellatrix favor");
+
+  const wrongFamilyTag = parseRelationshipDeltas("拉环提到莱斯特兰奇家的金库守卫龙。\n【关系变化：贝拉特里克斯·莱斯特兰奇+1】", cast, []);
+  const filteredFamilyTag = filterRelationshipDeltasByEvidence(wrongFamilyTag.entries, "我跟着拉环离开金库。", cast, [], {
+    aiText: "拉环提到莱斯特兰奇家的金库守卫龙。",
+  });
+  ok(filteredFamilyTag.length === 0, "wrong AI relationship tag from family surname context is filtered out");
+
+  const gringottsScene =
+    "海格正侧身给后面的人让路。哈利·波特初次进入古灵阁，绿色眼睛微微睁大。伊芙琳只是擦肩而过，听见海格压低声音对柜台后的妖精说：邓布利多教授让我来取713号金库里的那个小东西。";
+  const gringottsTags = parseRelationshipDeltas(`${gringottsScene}\n【关系变化：哈利+1；鲁伯·海格+1；阿不思·珀西瓦尔·伍尔弗里克·布赖恩·邓布利多+1】`, cast, []);
+  const filteredGringotts = filterRelationshipDeltasByEvidence(gringottsTags.entries, "我从古灵阁金库取完钱，准备离开。", cast, [], {
+    aiText: gringottsScene,
+    playerName: "伊芙琳·塞尔温",
+  });
+  ok(filteredGringotts.length === 0, "background appearance and overheard mentions do not create favor");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);

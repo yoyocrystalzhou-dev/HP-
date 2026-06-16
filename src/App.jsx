@@ -1174,13 +1174,14 @@ ${transcriptLines(chunk)}`;
         lastUserForMechanics.display || "",
         projectChars,
         activeProject?.ocs || [],
-        { aiText: visibleText }
+        { aiText: visibleText, playerName: player.name }
       );
       if (allowRelationshipDeltas) {
         // 兜底/补全：从玩家这轮可见输入里识别直接互动到的角色，对 AI 没有给出变化的角色
         // （尤其是原创角色 OC，AI 常常只给原著角色加分）补一个小幅 +1，保证互动后好感会动。
         const inferred = inferFavorDeltas(lastUserForMechanics.display || "", projectChars, activeProject?.ocs || [], {
           aiText: visibleText,
+          playerName: player.name,
           maxEntries: 4,
         });
         if (inferred.length) {

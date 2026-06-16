@@ -122,7 +122,13 @@ const player = createPlayerCharacter({
 
 // 8. Affinity supports canon + OC and avoids distant observation.
 {
-  const cast = [{ id: "harry", name: "哈利·波特" }, { id: "ron", name: "罗恩·韦斯莱" }];
+  const cast = [
+    { id: "harry", name: "哈利·波特" },
+    { id: "ron", name: "罗恩·韦斯莱" },
+    { id: "bellatrix", name: "贝拉特里克斯·莱斯特兰奇" },
+    { id: "albus", name: "阿不思·珀西瓦尔·伍尔弗里克·布赖恩·邓布利多" },
+    { id: "hagrid", name: "鲁伯·海格" },
+  ];
   const oc = createOC({ id: "oc-emily", name: "艾米丽", persona: "温和的新生", tieName: "德拉科", tieRelation: "发小" });
   ok(findCharacter("艾米丽", cast, [oc])?.kind === "oc", "findCharacter resolves OC");
   ok(formatOcs([oc]).includes("可积累好感"), "OC prompt block declares affinity support");
@@ -147,6 +153,24 @@ const player = createPlayerCharacter({
   const hiddenOnly = parseRelationshipDeltas("罗恩把书包挪开，让你坐下。\n【关系变化：赫敏+1；罗恩+1】", cast, [oc]);
   const hiddenFiltered = filterRelationshipDeltasByEvidence(hiddenOnly.entries, "我问能不能坐在这里。", cast, [oc], { aiText: "罗恩把书包挪开，让你坐下。" });
   ok(hiddenFiltered.length === 1 && hiddenFiltered[0].id === "ron", "hidden-only tag cannot create favor for an unmentioned character");
+
+  const familyOnly = inferFavorDeltas("我跟着拉环离开金库。", cast, [oc], {
+    aiText: "拉环说：那是莱斯特兰奇家的金库守卫龙。",
+    maxEntries: 4,
+  });
+  ok(!familyOnly.some((x) => x.id === "bellatrix"), "family surname context does not create absent character favor");
+
+  const familyTag = parseRelationshipDeltas("拉环说那是莱斯特兰奇家的金库守卫龙。\n【关系变化：贝拉特里克斯·莱斯特兰奇+1】", cast, [oc]);
+  const familyFiltered = filterRelationshipDeltasByEvidence(familyTag.entries, "我跟着拉环离开金库。", cast, [oc], { aiText: "拉环说那是莱斯特兰奇家的金库守卫龙。" });
+  ok(familyFiltered.length === 0, "family surname relationship tag is rejected without direct character evidence");
+
+  const gringottsScene = "海格给哈利让路。哈利·波特仰头看着古灵阁大厅。伊芙琳只是擦肩而过，听见海格对妖精说：邓布利多教授让我来取713号金库里的东西。";
+  const gringottsTags = parseRelationshipDeltas(`${gringottsScene}\n【关系变化：哈利+1；鲁伯·海格+1；阿不思·珀西瓦尔·伍尔弗里克·布赖恩·邓布利多+1】`, cast, [oc]);
+  const gringottsFiltered = filterRelationshipDeltasByEvidence(gringottsTags.entries, "我取完钱离开古灵阁。", cast, [oc], {
+    aiText: gringottsScene,
+    playerName: "伊芙琳·塞尔温",
+  });
+  ok(gringottsFiltered.length === 0, "background Gringotts appearances and mentions do not affect favor");
 }
 
 // 9. Clue tracker rejects oversized invented mysteries but keeps small/canon clues.

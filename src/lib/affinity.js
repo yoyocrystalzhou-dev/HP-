@@ -147,6 +147,7 @@ export function relationshipRulesBlock(characters = [], ocs = []) {
 export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {}) {
   const playerText = String(userText || "").trim();
   const aiText = String(opts.aiText || "").trim();
+  const playerName = String(opts.playerName || "").trim();
   const text = [playerText, aiText].filter(Boolean).join("\n");
   if (!text) return [];
   const maxEntries = Math.max(1, Math.min(6, Number(opts.maxEntries || 4)));
@@ -157,7 +158,6 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
 
   const compactPlayer = playerText.replace(/\s+/g, "");
   const compactAi = aiText.replace(/\s+/g, "");
-  const compactAll = text.replace(/\s+/g, "");
   const groupIntent = /(?:大家|他们|她们|几个人|同学们|三人|两人|一起|都|所有人)/.test(compactPlayer);
   const interactionWords = [
     "说", "问", "答", "回应", "聊天", "交谈", "打招呼", "介绍", "邀请", "同行", "一起", "坐下",
@@ -167,10 +167,12 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
   const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const aliasesFor = (name) => {
     const parts = String(name || "").split(/[·・]/).filter(Boolean);
-    return [...new Set([name, parts[0], parts.at(-1)].filter((x) => x && x.length >= 2))];
+    return [...new Set([name, parts[0]].filter((x) => x && x.length >= 2))];
   };
   const hasAlias = (source, aliases) => aliases.some((alias) => source.includes(alias));
   const hasDialogue = (source, aliases) => aliases.some((alias) => new RegExp(`${escapeRegExp(alias)}[：:]`).test(source));
+  const playerAliases = [...new Set(["你", "玩家", playerName, ...String(playerName || "").split(/[·・]/)].filter((x) => x && x.length >= 1))];
+  const mentionsPlayer = (source) => playerAliases.some((alias) => source.includes(alias));
   const isReferenceOnly = (source, aliases) => aliases.some((alias) => {
     const name = escapeRegExp(alias);
     return new RegExp(
@@ -178,14 +180,32 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
       `${name}(?:现在|今天|到底|究竟|人|他|她|最近|刚才)?(在哪|在哪里|去哪|去哪里|在不在|是否在|有没有来|有没有到|情况|消息|下落|去向|名字|不在|没来|没有出现|不见)`
     ).test(source);
   });
-  const hasInteractionNear = (source, aliases) => {
+  const hasPlayerInteractionNear = (source, aliases) => {
     for (const alias of aliases) {
       const i = source.indexOf(alias);
       if (i < 0) continue;
       const window = source.slice(Math.max(0, i - 28), i + alias.length + 36);
       if (/(没有|没|不).{0,8}(过去|靠近|说话|交谈|聊天|回应|打招呼|互动)|远远|只是看|只看|没有过去/.test(window)) continue;
       if (isReferenceOnly(window, [alias])) continue;
-      if (interactionWords.some((word) => window.includes(word))) return true;
+      if (new RegExp(`(向|对|跟|和|找|邀请|安慰|帮助|帮|给|递给|问|请求|拜托|告诉|打招呼|道歉|说服)${escapeRegExp(alias)}`).test(window)) return true;
+      if (new RegExp(`${escapeRegExp(alias)}(说话|交谈|聊天|同行|一起|坐下|握手|并肩|对峙|争执)`).test(window)) return true;
+    }
+    return false;
+  };
+  const hasAiDirectToPlayer = (source, aliases) => {
+    for (const alias of aliases) {
+      const i = source.indexOf(alias);
+      if (i < 0) continue;
+      const window = source.slice(Math.max(0, i - 30), i + alias.length + 56);
+      if (/(没有|没|不).{0,8}(过去|靠近|说话|交谈|聊天|回应|打招呼|互动)|远远|只是看|只看|没有过去/.test(window)) continue;
+      if (isReferenceOnly(window, [alias])) continue;
+      const name = escapeRegExp(alias);
+      const directToPlayer = playerAliases.some((p) => {
+        const actor = escapeRegExp(p);
+        return new RegExp(`${name}.{0,18}(对|向|朝|冲|看向|望向|转向|递给|交给|问|回答|回应|点头|微笑|笑|招手|让座|挪开|拍了拍).{0,18}${actor}|${name}[：:].{0,40}${actor}|${actor}.{0,16}(对|向|问|邀请|安慰|帮助|叫住).{0,16}${name}`).test(window);
+      });
+      if (directToPlayer) return true;
+      if (groupIntent && interactionWords.some((word) => window.includes(word))) return true;
     }
     return false;
   };
@@ -201,19 +221,19 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     const mentionedByAi = hasAlias(compactAi, aliases);
     if (!mentionedByPlayer && !mentionedByAi) continue;
     const speaks = hasDialogue(aiText, aliases);
-    const playerInteracted = hasInteractionNear(compactPlayer, aliases);
-    const aiInteracted = hasInteractionNear(compactAi, aliases);
-    const interacted = playerInteracted || aiInteracted;
+    const playerInteracted = hasPlayerInteractionNear(compactPlayer, aliases);
+    const aiInteracted = hasAiDirectToPlayer(compactAi, aliases);
+    const directEvidence = playerInteracted || aiInteracted || (groupIntent && speaks);
     const referenceOnly = isReferenceOnly(compactPlayer, aliases) || isReferenceOnly(compactAi, aliases);
-    if ((absentInAi(aliases) || referenceOnly) && !speaks && !aiInteracted) continue;
+    if ((absentInAi(aliases) || referenceOnly) && !directEvidence) continue;
     let score = 0;
     if (mentionedByPlayer && playerInteracted) score += 4;
     else if (mentionedByPlayer) score += 1;
-    if (speaks) score += 4;
+    if (groupIntent && speaks) score += 4;
     if (aiInteracted) score += 3;
-    if (groupIntent && (speaks || interacted)) score += 2;
-    if (mentionedByAi && !speaks && !interacted && !mentionedByPlayer) score -= 2;
-    if (score >= 3) scored.push({ ...c, score });
+    if (groupIntent && aiInteracted) score += 2;
+    if (mentionedByAi && !directEvidence && !mentionedByPlayer) score -= 2;
+    if (directEvidence && score >= 3) scored.push({ ...c, score });
   }
 
   return scored
@@ -226,6 +246,7 @@ export function filterRelationshipDeltasByEvidence(entries = [], userText, chara
   if (!entries.length) return [];
   const evidence = inferFavorDeltas(userText, characters, ocs, {
     aiText: opts.aiText || "",
+    playerName: opts.playerName || "",
     maxEntries: 6,
   });
   const allowed = new Set(evidence.map((entry) => entry.id));
