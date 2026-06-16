@@ -54,7 +54,7 @@ import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummar
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
-import dayBgUrl from "./assets/day-bg.png";
+import dayFrameUrl from "./assets/day-frame.png";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -266,9 +266,7 @@ export default function App() {
     : {
         bg: DAY_BG,
         chromeBg: "linear-gradient(180deg, rgba(248,246,235,0.96), rgba(230,223,205,0.88))",
-        stageBg:
-          "radial-gradient(80% 58% at 50% 12%, rgba(255,255,250,0.58), transparent 72%)," +
-          "linear-gradient(90deg, rgba(176,158,122,0.11), transparent 12%, transparent 88%, rgba(176,158,122,0.11))",
+        stageBg: `url(${dayFrameUrl}) center / 100% 100% no-repeat`,
         chromeText: "#827866",
         chromeMuted: "rgba(118,105,85,0.62)",
         line: "rgba(142,128,100,0.34)",
@@ -1903,7 +1901,7 @@ ${transcriptLines(chunk)}`;
         border: HP_KIOSK ? (hpIsNight ? `1.4px solid ${hpUi.inputBorder}` : "none") : (isMobile ? "none" : `1px solid ${V.line}`),
         borderRadius: HP_KIOSK ? (isMobile ? 0 : 12) : (isMobile ? 0 : 20),
         background: HP_KIOSK
-          ? (hpIsNight ? "rgba(8,9,14,0.50)" : `url(${dayBgUrl}) center top / 100% 100% no-repeat, ${DAY_BG}`)
+          ? (hpIsNight ? "rgba(8,9,14,0.50)" : "linear-gradient(180deg, #efe8d8, #e7decb)")
           : V.frame,
         boxShadow: HP_KIOSK
           ? (hpIsNight ? "0 28px 90px rgba(0,0,0,0.50), inset 0 0 0 3px rgba(217,195,139,0.04)" : "0 18px 48px rgba(93,76,54,0.18)")
@@ -1972,6 +1970,11 @@ ${transcriptLines(chunk)}`;
                   {hpIsNight ? "夜" : "日"}
                 </button>
               </div>
+
+              {/* 徽章与标题之间的阴影分隔线（对应背景图顶部的横线） */}
+              {!hpIsNight && (
+                <div aria-hidden="true" style={{ width: "100%", height: 0, borderTop: "1px solid rgba(120,107,86,0.42)", boxShadow: "0 1px 0 rgba(255,255,255,0.55)", margin: isMobile ? "1px 0 2px" : "2px 0 3px" }} />
+              )}
 
               <FoilTitle tone={hpTone} mobile={isMobile}>Harry Potter</FoilTitle>
 
