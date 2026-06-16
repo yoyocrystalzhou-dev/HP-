@@ -54,6 +54,7 @@ import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummar
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
+import dayBgUrl from "./assets/day-bg.png";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -1899,13 +1900,13 @@ ${transcriptLines(chunk)}`;
         minWidth: 0,
         position: "relative",
         zIndex: 1,
-        border: HP_KIOSK ? `1.4px solid ${hpUi.inputBorder}` : (isMobile ? "none" : `1px solid ${V.line}`),
+        border: HP_KIOSK ? (hpIsNight ? `1.4px solid ${hpUi.inputBorder}` : "none") : (isMobile ? "none" : `1px solid ${V.line}`),
         borderRadius: HP_KIOSK ? (isMobile ? 0 : 12) : (isMobile ? 0 : 20),
         background: HP_KIOSK
-          ? (hpIsNight ? "rgba(8,9,14,0.50)" : "linear-gradient(180deg, rgba(247,245,235,0.86), rgba(226,218,199,0.82))")
+          ? (hpIsNight ? "rgba(8,9,14,0.50)" : `url(${dayBgUrl}) center top / 100% 100% no-repeat, ${DAY_BG}`)
           : V.frame,
         boxShadow: HP_KIOSK
-          ? (hpIsNight ? "0 28px 90px rgba(0,0,0,0.50), inset 0 0 0 3px rgba(217,195,139,0.04)" : "0 18px 48px rgba(93,76,54,0.18), inset 0 0 0 3px rgba(255,255,255,0.36), inset 0 0 0 5px rgba(126,112,88,0.08)")
+          ? (hpIsNight ? "0 28px 90px rgba(0,0,0,0.50), inset 0 0 0 3px rgba(217,195,139,0.04)" : "0 18px 48px rgba(93,76,54,0.18)")
           : (isMobile ? "none" : "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)"),
       }}>
         {/* Header */}
@@ -1914,10 +1915,10 @@ ${transcriptLines(chunk)}`;
             flexShrink: 0,
             position: "relative",
             zIndex: 1,
-            borderBottom: `1px solid ${hpUi.line}`,
-            background: hpIsNight ? hpUi.chromeBg : "linear-gradient(180deg, rgba(248,246,235,0.78), rgba(230,223,205,0.48))",
-            backdropFilter: "blur(8px)",
-            boxShadow: hpIsNight ? "0 10px 30px rgba(0,0,0,0.24)" : "0 10px 26px rgba(93,76,54,0.12)",
+            borderBottom: hpIsNight ? `1px solid ${hpUi.line}` : "none",
+            background: hpIsNight ? hpUi.chromeBg : "linear-gradient(180deg, rgba(247,244,232,0.42), rgba(236,228,208,0.06))",
+            backdropFilter: hpIsNight ? "blur(8px)" : "blur(2px)",
+            boxShadow: hpIsNight ? "0 10px 30px rgba(0,0,0,0.24)" : "none",
             padding: isMobile ? "5px 8px 10px" : "7px 18px 14px",
           }}>
             <div style={{ position: "relative", zIndex: 1, maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 5 : 8 }}>
