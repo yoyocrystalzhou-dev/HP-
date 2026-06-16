@@ -17,7 +17,7 @@ import {
 import { applyInventoryChanges, inferShoppingChanges, hasItem, missingRequiredItems } from "../src/lib/inventory.js";
 import { ACTIONS } from "../src/lib/checks.js";
 import { inferNaturalCommand, inventoryIssueForCommand } from "../src/lib/lifeMechanics.js";
-import { inferFavorDeltas, parseRelationshipDeltas } from "../src/lib/affinity.js";
+import { filterRelationshipDeltasByEvidence, inferFavorDeltas, parseRelationshipDeltas } from "../src/lib/affinity.js";
 import { advanceCalendarClock, calendarMoment } from "../src/lib/schoolCalendar.js";
 import { lessonsFor, timetableContext, weekdayForLabel } from "../src/lib/timetable.js";
 import { activeClues, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "../src/lib/clues.js";
@@ -258,6 +258,24 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
     maxEntries: 4,
   });
   ok(mixed.some((x) => x.id === "oc-emily" && x.kind === "oc"), "group interaction fallback includes OC participants");
+
+  const absentMention = inferFavorDeltas("我问罗恩哈利在哪里。", cast, [], {
+    aiText: "罗恩摇摇头：哈利不在，他大概还在古灵阁。",
+    maxEntries: 4,
+  });
+  ok(absentMention.some((x) => x.id === "ron") && !absentMention.some((x) => x.id === "harry"), "asking about an absent character only affects the present respondent");
+
+  const wrongTag = parseRelationshipDeltas("罗恩说哈利今天不在。\n【关系变化：哈利+1；罗恩+1】", cast, []);
+  const filteredWrongTag = filterRelationshipDeltasByEvidence(wrongTag.entries, "我问罗恩哈利在哪里。", cast, [], {
+    aiText: "罗恩说哈利今天不在。",
+  });
+  ok(filteredWrongTag.length === 1 && filteredWrongTag[0].id === "ron", "wrong AI relationship tag for absent character is filtered out");
+
+  const hiddenOnlyTag = parseRelationshipDeltas("罗恩把书包挪开，让你坐下。\n【关系变化：赫敏+1；罗恩+1】", cast, []);
+  const filteredHiddenOnly = filterRelationshipDeltasByEvidence(hiddenOnlyTag.entries, "我问能不能坐在这里。", cast, [], {
+    aiText: "罗恩把书包挪开，让你坐下。",
+  });
+  ok(filteredHiddenOnly.length === 1 && filteredHiddenOnly[0].id === "ron", "hidden-only relationship tag for unmentioned character is filtered out");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);

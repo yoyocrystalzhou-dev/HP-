@@ -40,7 +40,7 @@ import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects } 
 import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
 import {
   favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor,
-  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock, inferFavorDeltas,
+  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock, inferFavorDeltas, filterRelationshipDeltasByEvidence,
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
@@ -1169,7 +1169,13 @@ ${transcriptLines(chunk)}`;
           return { ...p, playerCharacter: { ...pc, stats: applyDailyGrowth(pc.stats, daily.entries) } };
         });
       }
-      let relEntries = relationship.entries;
+      let relEntries = filterRelationshipDeltasByEvidence(
+        relationship.entries,
+        lastUserForMechanics.display || "",
+        projectChars,
+        activeProject?.ocs || [],
+        { aiText: visibleText }
+      );
       if (allowRelationshipDeltas) {
         // 兜底/补全：从玩家这轮可见输入里识别直接互动到的角色，对 AI 没有给出变化的角色
         // （尤其是原创角色 OC，AI 常常只给原著角色加分）补一个小幅 +1，保证互动后好感会动。

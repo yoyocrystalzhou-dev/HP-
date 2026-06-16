@@ -12,7 +12,7 @@ import {
 import { applyInventoryChanges, createInitialInventory, inferShoppingChanges, hasItem, missingRequiredItems } from "../src/lib/inventory.js";
 import { parseActionCommand, runAction, ACTIONS, checkEffects } from "../src/lib/checks.js";
 import { parseDailyGrowth, applyDailyGrowth } from "../src/lib/dailyGrowth.js";
-import { applyRelationshipDeltas, findCharacter, inferFavorDeltas, parseRelationshipDeltas } from "../src/lib/affinity.js";
+import { applyRelationshipDeltas, filterRelationshipDeltasByEvidence, findCharacter, inferFavorDeltas, parseRelationshipDeltas } from "../src/lib/affinity.js";
 import { createOC, formatOcs } from "../src/lib/oc.js";
 import { calendarMoment, advanceCalendarClock, buildCalendarChoiceInput } from "../src/lib/schoolCalendar.js";
 import { inferNaturalCommand, adjustedActionCost, inventoryIssueForCommand, settleExam } from "../src/lib/lifeMechanics.js";
@@ -136,6 +136,17 @@ const player = createPlayerCharacter({
 
   const distant = inferFavorDeltas("我远远看见艾米丽在窗边，没有过去。", cast, [oc], { aiText: "艾米丽没有和你交谈。" });
   ok(distant.length === 0, "distant OC observation does not increase favor");
+
+  const absent = inferFavorDeltas("我问罗恩哈利在哪里。", cast, [oc], { aiText: "罗恩回答：哈利不在这里。", maxEntries: 4 });
+  ok(absent.some((x) => x.id === "ron") && !absent.some((x) => x.id === "harry"), "asking about absent canon character does not increase absent favor");
+
+  const wrongTag = parseRelationshipDeltas("罗恩提起哈利不在。\n【关系变化：哈利+1；罗恩+1】", cast, [oc]);
+  const filtered = filterRelationshipDeltasByEvidence(wrongTag.entries, "我问罗恩哈利在哪里。", cast, [oc], { aiText: "罗恩提起哈利不在。" });
+  ok(filtered.length === 1 && filtered[0].id === "ron", "relationship tags are filtered by direct interaction evidence");
+
+  const hiddenOnly = parseRelationshipDeltas("罗恩把书包挪开，让你坐下。\n【关系变化：赫敏+1；罗恩+1】", cast, [oc]);
+  const hiddenFiltered = filterRelationshipDeltasByEvidence(hiddenOnly.entries, "我问能不能坐在这里。", cast, [oc], { aiText: "罗恩把书包挪开，让你坐下。" });
+  ok(hiddenFiltered.length === 1 && hiddenFiltered[0].id === "ron", "hidden-only tag cannot create favor for an unmentioned character");
 }
 
 // 9. Clue tracker rejects oversized invented mysteries but keeps small/canon clues.

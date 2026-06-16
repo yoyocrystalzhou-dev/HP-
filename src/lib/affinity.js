@@ -171,16 +171,28 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
   };
   const hasAlias = (source, aliases) => aliases.some((alias) => source.includes(alias));
   const hasDialogue = (source, aliases) => aliases.some((alias) => new RegExp(`${escapeRegExp(alias)}[：:]`).test(source));
+  const isReferenceOnly = (source, aliases) => aliases.some((alias) => {
+    const name = escapeRegExp(alias);
+    return new RegExp(
+      `(打听|问起|提起|谈到|聊起|说起|想到|想起|听说|关于).{0,18}${name}|` +
+      `${name}(?:现在|今天|到底|究竟|人|他|她|最近|刚才)?(在哪|在哪里|去哪|去哪里|在不在|是否在|有没有来|有没有到|情况|消息|下落|去向|名字|不在|没来|没有出现|不见)`
+    ).test(source);
+  });
   const hasInteractionNear = (source, aliases) => {
     for (const alias of aliases) {
       const i = source.indexOf(alias);
       if (i < 0) continue;
       const window = source.slice(Math.max(0, i - 28), i + alias.length + 36);
       if (/(没有|没|不).{0,8}(过去|靠近|说话|交谈|聊天|回应|打招呼|互动)|远远|只是看|只看|没有过去/.test(window)) continue;
+      if (isReferenceOnly(window, [alias])) continue;
       if (interactionWords.some((word) => window.includes(word))) return true;
     }
     return false;
   };
+  const absentInAi = (aliases) => aliases.some((alias) => {
+    const name = escapeRegExp(alias);
+    return new RegExp(`${name}(?:现在|今天|到底|究竟|人|他|她|最近|刚才)?(不在|没来|没有出现|不见|不在场|已经离开|并未出现|没有和你|没和你)`).test(compactAi);
+  });
 
   const scored = [];
   for (const c of all) {
@@ -192,6 +204,8 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     const playerInteracted = hasInteractionNear(compactPlayer, aliases);
     const aiInteracted = hasInteractionNear(compactAi, aliases);
     const interacted = playerInteracted || aiInteracted;
+    const referenceOnly = isReferenceOnly(compactPlayer, aliases) || isReferenceOnly(compactAi, aliases);
+    if ((absentInAi(aliases) || referenceOnly) && !speaks && !aiInteracted) continue;
     let score = 0;
     if (mentionedByPlayer && playerInteracted) score += 4;
     else if (mentionedByPlayer) score += 1;
@@ -206,4 +220,14 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "zh-Hans-CN"))
     .slice(0, maxEntries)
     .map((c) => ({ id: c.id, name: c.name, kind: c.kind, delta: 1, note: "" }));
+}
+
+export function filterRelationshipDeltasByEvidence(entries = [], userText, characters = [], ocs = [], opts = {}) {
+  if (!entries.length) return [];
+  const evidence = inferFavorDeltas(userText, characters, ocs, {
+    aiText: opts.aiText || "",
+    maxEntries: 6,
+  });
+  const allowed = new Set(evidence.map((entry) => entry.id));
+  return entries.filter((entry) => allowed.has(entry.id));
 }
