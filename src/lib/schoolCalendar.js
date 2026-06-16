@@ -1,4 +1,4 @@
-import { labelSortKey } from "./timeline.js";
+import { addDays, labelSortKey } from "./timeline.js";
 import { classChoiceFromTimetable, formatTimetableBlock, timetableContext } from "./timetable.js";
 
 export const CLASS_DAY_RULES = [
@@ -37,6 +37,16 @@ export function advanceDayPeriod(id) {
   return { period: periodOrder[i + 1], dayRollover: false };
 }
 
+export function advanceCalendarClock({ currentTimeLabel = "", periodId = "morning" } = {}) {
+  const { period, dayRollover } = advanceDayPeriod(periodId);
+  const key = labelSortKey(currentTimeLabel);
+  return {
+    currentTimeLabel: dayRollover && key >= 19910816 ? addDays(currentTimeLabel, 1) : currentTimeLabel,
+    periodId: period,
+    dayRollover,
+  };
+}
+
 /** 当前日期之后的下一个校历事件节点（用于「快进到下一个重要日子」）。 */
 export function nextCalendarEvent(currentTimeLabel) {
   const k = labelSortKey(currentTimeLabel);
@@ -64,7 +74,7 @@ const eventChoice = (label, intent, opts = {}) => choice(label, intent, opts);
 const advanceChoice = (label, intent, nextTimeLabel) => choice(label, intent, { nextTimeLabel, nextPeriodId: "morning" });
 
 // 养成型选项：选中后给予确定性的数值成长（由 App 读取 choice.growth 应用）。
-const growthChoice = (label, intent, growth) => choice(label, intent, { growth });
+const growthChoice = (label, intent, growth, opts = {}) => choice(label, intent, { growth, ...opts });
 
 export const HOGWARTS_CALENDAR_EVENTS = {
   19910816: {
@@ -631,6 +641,53 @@ function shoppingMoment() {
   return calendarEvent(19910816);
 }
 
+function openingDayMoment(periodId) {
+  const p = dayPeriod(periodId);
+  const sets = {
+    morning: [
+      eventChoice("寻找站台", "我想先在国王十字车站寻找九又四分之三站台。"),
+      eventChoice("穿过屏障", "我想推着行李穿过站台屏障，真正踏进魔法世界。"),
+      eventChoice("上车找包厢", "我想登上霍格沃茨特快，找一个包厢坐下。"),
+      eventChoice("站台遇见同学", "我想在站台上看看会不会遇见同届新生或熟面孔。"),
+    ],
+    afternoon: [
+      eventChoice("列车包厢", "下午列车还在北上，我想在包厢里度过一段真实的旅程。"),
+      eventChoice("列车上闲逛", "我想在列车上走走，看看会遇见哪些同届新生。"),
+      eventChoice("买些零食", "食品推车经过时，我想买点巧克力蛙或比比多味豆。"),
+      eventChoice("抵达霍格莫德", "窗外天色渐暗，我想把镜头推进到抵达霍格莫德站。"),
+    ],
+    dinner: [
+      eventChoice("抵达城堡", "我想跟随新生队伍抵达霍格沃茨，第一次看见城堡和礼堂。"),
+      eventChoice("等待分院", "我想站在新生队伍里等待分院，观察教授和同学的反应。"),
+      eventChoice("分院仪式", "我想让分院帽进行分院，但不要替我固定之后的人生。"),
+      eventChoice("开学晚宴", "我想参加开学晚宴，听邓布利多讲话，感受第一晚的气氛。"),
+    ],
+    night: [
+      eventChoice("前往公共休息室", "晚宴结束后，我想跟着级长前往公共休息室，记住路线和口令。"),
+      eventChoice("认识室友", "我想在寝室或休息室里认识同学院的新同学。"),
+      eventChoice("整理行李", "我想整理今天买来的东西和带来的行李，让自己安顿下来。"),
+      eventChoice("结束开学日", "第一天太漫长了，我想回寝室休息，明天正式开始上课。", {
+        nextTimeLabel: "1991年9月2日",
+        nextPeriodId: "morning",
+      }),
+    ],
+    late: [
+      eventChoice("直接休息", "已经深夜了，我想回寝室睡下，让开学第一天自然结束。", {
+        nextTimeLabel: "1991年9月2日",
+        nextPeriodId: "morning",
+      }),
+      eventChoice("深夜低声谈话", "已经深夜了，我想和室友低声说几句，但不再把主线往前推太多。"),
+      eventChoice("记下第一天", "我想在睡前记录开学第一天发生的事。"),
+    ],
+  };
+  return {
+    title: `开学日 · ${p.label}`,
+    periodLabel: p.label,
+    note: "9 月 1 日按生活时段推进：上午站台，下午列车，晚饭后抵达与分院，夜晚回到公共休息室。你可以自由扮演，也可以随时进入下一时段。",
+    choices: sets[p.id] || sets.morning,
+  };
+}
+
 // 开学前养成（8/17–8/31）：预习、练咒、飞行、写信等，确定性小幅成长；准备好就出发。
 function preTermMoment() {
   return {
@@ -638,11 +695,11 @@ function preTermMoment() {
     periodLabel: "假期",
     note: "距离开学还有些日子。你可以预习课本、练习魔咒、熟悉飞行或给家人写信——每做一件都会带来一点成长；准备好了就出发去国王十字车站。也可以直接在输入框自由写。",
     choices: [
-      growthChoice("预习课本", "我想预习这学期的课本，为开学做准备。", { academic: 2 }),
-      growthChoice("练习魔咒", "我想偷偷练习几个基础魔咒，熟悉挥杖的手感。", { magic: 2 }),
-      growthChoice("熟悉飞行", "我想找机会熟悉一下扫帚和飞行的感觉。", { agility: 2 }),
-      growthChoice("给家人写信", "我想给家人写信，聊聊即将到来的霍格沃茨生活。", { family: 2 }),
-      growthChoice("读《一段校史》", "我想读一读《霍格沃茨，一段校史》，多了解这个魔法世界。", { academic: 1, courage: 1 }),
+      growthChoice("预习课本", "我想预习这学期的课本，为开学做准备。", { academic: 2 }, { advancePeriod: false }),
+      growthChoice("练习魔咒", "我想偷偷练习几个基础魔咒，熟悉挥杖的手感。", { magic: 2 }, { advancePeriod: false }),
+      growthChoice("熟悉飞行", "我想找机会熟悉一下扫帚和飞行的感觉。", { agility: 2 }, { advancePeriod: false }),
+      growthChoice("给家人写信", "我想给家人写信，聊聊即将到来的霍格沃茨生活。", { family: 2 }, { advancePeriod: false }),
+      growthChoice("读《一段校史》", "我想读一读《霍格沃茨，一段校史》，多了解这个魔法世界。", { academic: 1, courage: 1 }, { advancePeriod: false }),
       advanceChoice("准备出发 · 前往国王十字车站", "开学前的准备做得差不多了，我想出发前往国王十字车站。", "1991年9月1日"),
     ],
   };
@@ -713,6 +770,8 @@ export function calendarMoment({ currentTimeLabel, periodId }) {
   const k = labelSortKey(currentTimeLabel);
   if (k && k <= 19910816) return shoppingMoment();                  // 8/16 对角巷采购
   if (k && k >= 19910817 && k < 19910901) return preTermMoment();   // 8/17–8/31 开学前养成
+  if (k === 19910901) return openingDayMoment(periodId);            // 9/1 按时段推进站台/列车/分院
+  if (k === 19910902) return withFastForward(dailyMoment(periodId, currentTimeLabel), currentTimeLabel);
   const event = calendarEvent(k);
   if (event) return event;
   const month = k ? Math.floor((k % 10000) / 100) : 0;
@@ -743,6 +802,7 @@ export function buildCalendarChoiceInput(choiceItem, period, currentTimeLabel) {
   const schedule = beforeTerm ? "" : `校历作息：${CLASS_DAY_RULES.join(" ")}`;
   const timetable = beforeTerm ? "" : formatTimetableBlock(tt);
   const next = choiceItem.nextTimeLabel ? `本次选择后，当前日期应推进到：${choiceItem.nextTimeLabel}。` : "";
+  const nextPeriod = choiceItem.nextPeriodId ? `本次选择后，当前生活时段应为：${dayPeriod(choiceItem.nextPeriodId).label}。` : "";
   const lesson = choiceItem.lesson ? `本次选择对应课程：${choiceItem.lesson.course}；地点：${choiceItem.lesson.location}；教授：${choiceItem.lesson.teacher}。` : "";
   return [
     "【校历安排】",
@@ -751,6 +811,7 @@ export function buildCalendarChoiceInput(choiceItem, period, currentTimeLabel) {
     schedule,
     timetable,
     next,
+    nextPeriod,
     lesson,
     choiceItem.intent,
     "请根据校历、当前时间、地点、人物关系和已有记忆自由生成发生的事；这不是固定收益选项。"

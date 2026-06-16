@@ -17,7 +17,8 @@ import {
 import { applyInventoryChanges, inferShoppingChanges, hasItem, missingRequiredItems } from "../src/lib/inventory.js";
 import { ACTIONS } from "../src/lib/checks.js";
 import { inferNaturalCommand, inventoryIssueForCommand } from "../src/lib/lifeMechanics.js";
-import { calendarMoment } from "../src/lib/schoolCalendar.js";
+import { inferFavorDeltas, parseRelationshipDeltas } from "../src/lib/affinity.js";
+import { advanceCalendarClock, calendarMoment } from "../src/lib/schoolCalendar.js";
 import { lessonsFor, timetableContext, weekdayForLabel } from "../src/lib/timetable.js";
 import { activeClues, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "../src/lib/clues.js";
 import { formatHouseCupBlock, houseCupBoard, houseCupSummary, settleHouseCup } from "../src/lib/houseCup.js";
@@ -159,6 +160,18 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
   ok(moment.title === "上午课表", "calendar moment title reflects class timetable");
   ok(moment.choices[0].mechanic === "课堂" && moment.choices[0].label.includes("魔咒"), "first daily choice follows current class");
 
+  const preTerm = calendarMoment({ currentTimeLabel: "1991年8月17日", periodId: "morning" });
+  ok(preTerm.choices.find((c) => c.label === "预习课本")?.advancePeriod === false, "pre-term growth choices do not auto-jump to Sep 1");
+
+  const openingTrain = calendarMoment({ currentTimeLabel: "1991年9月1日", periodId: "afternoon" });
+  ok(openingTrain.title === "开学日 · 下午" && openingTrain.choices.some((c) => c.label === "列车上闲逛"), "Sep 1 afternoon uses train-scene choices");
+
+  const openingLate = calendarMoment({ currentTimeLabel: "1991年9月1日", periodId: "late" });
+  ok(openingLate.choices.some((c) => c.nextTimeLabel === "1991年9月2日"), "Sep 1 late offers a route to Sep 2 morning");
+
+  const nextMorning = advanceCalendarClock({ currentTimeLabel: "1991年9月1日", periodId: "late" });
+  ok(nextMorning.currentTimeLabel === "1991年9月2日" && nextMorning.periodId === "morning", "late Sep 1 advances to Sep 2 morning");
+
   const cmd = inferNaturalCommand("我想按课表上课：魔咒学（魔咒课教室 · 弗立维教授）", { periodId: "morning", currentTimeLabel: "1991年9月2日" });
   ok(cmd?.command === "课堂" && !cmd.blockedReason, "scheduled class can naturally trigger class check");
 
@@ -212,6 +225,39 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
   const summary = houseCupSummary(player, "1992年6月21日", { [settlement.result.key]: settlement.result });
   ok(summary.settled && summary.leader === "格兰芬多", "summary reads settled final board");
   ok(formatHouseCupBlock(player, "1992年6月20日").includes("不得改判冠军"), "prompt block includes canon guard");
+}
+
+// 16. Multi-character affinity fallback reads visible AI interaction, not just player text
+{
+  const cast = [
+    { id: "harry", name: "哈利·波特" },
+    { id: "ron", name: "罗恩·韦斯莱" },
+    { id: "hermione", name: "赫敏·格兰杰" },
+    { id: "draco", name: "德拉科·马尔福" },
+  ];
+  const inferred = inferFavorDeltas("我向他们打招呼，问能不能一起坐。", cast, [], {
+    aiText: "哈利：当然可以。罗恩笑着挪开书包，赫敏抬头回应你的问题。",
+    maxEntries: 4,
+  });
+  ok(inferred.some((x) => x.id === "harry"), "group interaction infers Harry favor");
+  ok(inferred.some((x) => x.id === "ron"), "group interaction infers Ron favor");
+  ok(inferred.some((x) => x.id === "hermione"), "group interaction infers Hermione favor");
+
+  const distant = inferFavorDeltas("我远远看见德拉科站在店门口，没有过去。", cast, [], {
+    aiText: "德拉科站在人群另一侧，和你没有交谈。",
+    maxEntries: 4,
+  });
+  ok(distant.length === 0, "distant observation does not infer favor");
+
+  const ocs = [{ id: "oc-emily", name: "艾米丽", kind: "oc" }];
+  const parsedOc = parseRelationshipDeltas("她们一起整理车厢。\n【关系变化：艾米丽+2】", cast, ocs);
+  ok(parsedOc.entries.length === 1 && parsedOc.entries[0].id === "oc-emily" && parsedOc.entries[0].delta === 2, "OC relationship tag parses into favor delta");
+
+  const mixed = inferFavorDeltas("我向他们打招呼，问能不能一起坐。", cast, ocs, {
+    aiText: "哈利：当然可以。艾米丽笑着拍了拍身边的座位，罗恩也挪开书包。",
+    maxEntries: 4,
+  });
+  ok(mixed.some((x) => x.id === "oc-emily" && x.kind === "oc"), "group interaction fallback includes OC participants");
 }
 
 console.log(`\nPhase 4B tests: ${pass} passed, ${fail} failed`);

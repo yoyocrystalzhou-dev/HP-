@@ -141,27 +141,69 @@ export function relationshipRulesBlock(characters = [], ocs = []) {
 }
 
 /**
- * 兜底：当 AI 本轮没有给出【关系变化】标签时，从玩家这一轮的输入里识别"直接互动到的角色"，
- * 给予小幅 +1（最多 2 人）。保证玩家主动互动后好感有可见变化，不会永远停在 0。
- * 用玩家可见输入（display）匹配，避免命中隐藏上下文里的角色名。
+ * 兜底：当 AI 本轮没有给出【关系变化】标签，或只漏写了部分参与者时，从本轮可见文本里
+ * 识别"直接互动到的角色"，给予小幅 +1。只看玩家输入 + AI 可见回复，避免命中隐藏上下文。
  */
-export function inferFavorDeltas(userText, characters = [], ocs = []) {
-  const text = String(userText || "").trim();
+export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {}) {
+  const playerText = String(userText || "").trim();
+  const aiText = String(opts.aiText || "").trim();
+  const text = [playerText, aiText].filter(Boolean).join("\n");
   if (!text) return [];
+  const maxEntries = Math.max(1, Math.min(6, Number(opts.maxEntries || 4)));
   const all = [
     ...(characters || []).map((c) => ({ id: c.id, name: c.name, kind: "canon" })),
     ...(ocs || []).map((o) => ({ id: o.id, name: o.name, kind: "oc" })),
   ].filter((c) => c.id && c.name);
-  const entries = [];
-  const seen = new Set();
-  for (const c of all) {
-    if (seen.has(c.id)) continue;
-    const first = c.name.split(/[·・]/)[0]; // 姓名首段，如"哈利·詹姆斯·波特" → "哈利"
-    if (text.includes(c.name) || (first.length >= 2 && text.includes(first))) {
-      entries.push({ id: c.id, name: c.name, kind: c.kind, delta: 1, note: "" });
-      seen.add(c.id);
-      if (entries.length >= 2) break;
+
+  const compactPlayer = playerText.replace(/\s+/g, "");
+  const compactAi = aiText.replace(/\s+/g, "");
+  const compactAll = text.replace(/\s+/g, "");
+  const groupIntent = /(?:大家|他们|她们|几个人|同学们|三人|两人|一起|都|所有人)/.test(compactPlayer);
+  const interactionWords = [
+    "说", "问", "答", "回应", "聊天", "交谈", "打招呼", "介绍", "邀请", "同行", "一起", "坐下",
+    "递给", "接过", "帮", "帮助", "安慰", "感谢", "道歉", "解释", "劝", "提醒", "看向",
+    "笑", "点头", "摇头", "握手", "并肩", "保护", "挡住", "争执", "对峙", "找", "走向", "靠近",
+  ];
+  const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const aliasesFor = (name) => {
+    const parts = String(name || "").split(/[·・]/).filter(Boolean);
+    return [...new Set([name, parts[0], parts.at(-1)].filter((x) => x && x.length >= 2))];
+  };
+  const hasAlias = (source, aliases) => aliases.some((alias) => source.includes(alias));
+  const hasDialogue = (source, aliases) => aliases.some((alias) => new RegExp(`${escapeRegExp(alias)}[：:]`).test(source));
+  const hasInteractionNear = (source, aliases) => {
+    for (const alias of aliases) {
+      const i = source.indexOf(alias);
+      if (i < 0) continue;
+      const window = source.slice(Math.max(0, i - 28), i + alias.length + 36);
+      if (/(没有|没|不).{0,8}(过去|靠近|说话|交谈|聊天|回应|打招呼|互动)|远远|只是看|只看|没有过去/.test(window)) continue;
+      if (interactionWords.some((word) => window.includes(word))) return true;
     }
+    return false;
+  };
+
+  const scored = [];
+  for (const c of all) {
+    const aliases = aliasesFor(c.name);
+    const mentionedByPlayer = hasAlias(compactPlayer, aliases);
+    const mentionedByAi = hasAlias(compactAi, aliases);
+    if (!mentionedByPlayer && !mentionedByAi) continue;
+    const speaks = hasDialogue(aiText, aliases);
+    const playerInteracted = hasInteractionNear(compactPlayer, aliases);
+    const aiInteracted = hasInteractionNear(compactAi, aliases);
+    const interacted = playerInteracted || aiInteracted;
+    let score = 0;
+    if (mentionedByPlayer && playerInteracted) score += 4;
+    else if (mentionedByPlayer) score += 1;
+    if (speaks) score += 4;
+    if (aiInteracted) score += 3;
+    if (groupIntent && (speaks || interacted)) score += 2;
+    if (mentionedByAi && !speaks && !interacted && !mentionedByPlayer) score -= 2;
+    if (score >= 3) scored.push({ ...c, score });
   }
-  return entries;
+
+  return scored
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "zh-Hans-CN"))
+    .slice(0, maxEntries)
+    .map((c) => ({ id: c.id, name: c.name, kind: c.kind, delta: 1, note: "" }));
 }

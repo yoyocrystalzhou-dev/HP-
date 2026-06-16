@@ -33,7 +33,7 @@ import GenerationSelect    from "./components/GenerationSelect.jsx";
 import CharacterCreator    from "./components/CharacterCreator.jsx";
 import { PRESETS, GENERATIONS } from "./presets/index.js";
 import { instantiatePreset, presetProjectId } from "./lib/loadPreset.js";
-import { currentBeat, canonAnchor, phaseName, addDays, labelSortKey } from "./lib/timeline.js";
+import { currentBeat, canonAnchor, phaseName } from "./lib/timeline.js";
 import { initialStats, formatStatsLine, GATING_RULES, STAMINA_MAX } from "./lib/stats.js";
 import { initialCourses, formatCoursesBlock } from "./lib/courses.js";
 import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects } from "./lib/checks.js";
@@ -44,7 +44,7 @@ import {
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
-import { dayPeriod, advanceDayPeriod, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
+import { dayPeriod, advanceCalendarClock, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
 import { formatTimetableBlock, timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
@@ -221,6 +221,13 @@ export default function App() {
   const currentCalendarMoment = HP_KIOSK && activeMode === "world"
     ? calendarMoment({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
     : null;
+  const nextClock = HP_KIOSK && activeProject
+    ? advanceCalendarClock({ currentTimeLabel: activeProject.currentTimeLabel, periodId: scenePeriodId })
+    : null;
+  const nextPeriodButtonText = scenePeriodId === "late" ? "睡到明早" : "下一时段";
+  const nextPeriodButtonTitle = nextClock
+    ? `${activeProject?.currentTimeLabel || ""} · ${scenePeriod.label} → ${nextClock.currentTimeLabel || ""} · ${dayPeriod(nextClock.periodId).label}`
+    : "进入下一时段";
   const hpTone = hpUiMode === "night" ? "night" : "day";
   const hpIsNight = hpTone === "night";
   const hpUi = hpIsNight
@@ -372,8 +379,35 @@ export default function App() {
       kind: "calendarChoice",
       growth: option.growth || null,
       disableActions: !(option.mechanic === "课堂" || ["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label)),
-      advancePeriod: !(option.nextTimeLabel || option.nextPeriodId),
+      advancePeriod: option.advancePeriod ?? !(option.nextTimeLabel || option.nextPeriodId),
     });
+  };
+
+  const advanceToNextPeriod = () => {
+    if (!activeProject) return;
+    const current = dayPeriod(activeProject.dayPeriod || "morning");
+    const next = advanceCalendarClock({
+      currentTimeLabel: activeProject.currentTimeLabel,
+      periodId: current.id,
+    });
+    patchProject((p) => ({
+      ...p,
+      currentTimeLabel: next.currentTimeLabel,
+      dayPeriod: next.periodId,
+      beatProgress: next.dayRollover ? 0 : p.beatProgress,
+    }));
+    const nextPeriodLabel = dayPeriod(next.periodId).label;
+    setStatus(next.dayRollover ? `已进入 ${next.currentTimeLabel} · ${nextPeriodLabel}` : `已进入${nextPeriodLabel}`);
+    setTimeout(() => setStatus(""), 1800);
+  };
+
+  const restClockForProject = (p) => {
+    const startPeriod = p.dayPeriod || "morning";
+    let next = advanceCalendarClock({ currentTimeLabel: p.currentTimeLabel, periodId: startPeriod });
+    if (startPeriod === "night" && next.periodId !== "morning") {
+      next = advanceCalendarClock({ currentTimeLabel: next.currentTimeLabel, periodId: next.periodId });
+    }
+    return next;
   };
 
   // ── One-time migration: v0 (pre-Project) and v1 → v2 ──
@@ -1139,7 +1173,10 @@ ${transcriptLines(chunk)}`;
       if (allowRelationshipDeltas) {
         // 兜底/补全：从玩家这轮可见输入里识别直接互动到的角色，对 AI 没有给出变化的角色
         // （尤其是原创角色 OC，AI 常常只给原著角色加分）补一个小幅 +1，保证互动后好感会动。
-        const inferred = inferFavorDeltas(lastUserForMechanics.display || "", projectChars, activeProject?.ocs || []);
+        const inferred = inferFavorDeltas(lastUserForMechanics.display || "", projectChars, activeProject?.ocs || [], {
+          aiText: visibleText,
+          maxEntries: 4,
+        });
         if (inferred.length) {
           const have = new Set(relEntries.map((e) => e.id));
           relEntries = [...relEntries, ...inferred.filter((e) => !have.has(e.id))];
@@ -1177,11 +1214,16 @@ ${transcriptLines(chunk)}`;
       // 选「快进到下一个重要日子」一次性跨过空白日子。这样玩家完全掌控节奏：可只玩一天，也可玩很多天。
       if (HP_KIOSK && activeMode === "world" && lastUserForMechanics.advancePeriod) {
         patchProject((p) => {
-          const { period, dayRollover } = advanceDayPeriod(p.dayPeriod || "morning");
-          const label = dayRollover && labelSortKey(p.currentTimeLabel) >= 19910816
-            ? addDays(p.currentTimeLabel, 1)
-            : p.currentTimeLabel;
-          return { ...p, dayPeriod: period, currentTimeLabel: label };
+          const next = advanceCalendarClock({
+            currentTimeLabel: p.currentTimeLabel,
+            periodId: p.dayPeriod || "morning",
+          });
+          return {
+            ...p,
+            dayPeriod: next.periodId,
+            currentTimeLabel: next.currentTimeLabel,
+            beatProgress: next.dayRollover ? 0 : p.beatProgress,
+          };
         });
       }
 
@@ -1296,7 +1338,14 @@ ${transcriptLines(chunk)}`;
         actionAnchor = "【行动】玩家休息 / 睡眠，体力完全恢复。请叙述一段休息或入睡的过渡，并自然推进到下一时段。";
         patchProject((p) => {
           const pc = p.playerCharacter || {};
-          return { ...p, dayPeriod: "morning", playerCharacter: { ...pc, stats: { ...(pc.stats || {}), stamina: STAMINA_MAX } } };
+          const next = restClockForProject(p);
+          return {
+            ...p,
+            dayPeriod: next.periodId,
+            currentTimeLabel: next.currentTimeLabel,
+            beatProgress: next.dayRollover ? 0 : p.beatProgress,
+            playerCharacter: { ...pc, stats: { ...(pc.stats || {}), stamina: STAMINA_MAX } },
+          };
         });
       } else if (cmd.action.confess) {
         // 告白：好感度 ≥60 才成（恋人门槛）
@@ -2314,8 +2363,31 @@ ${transcriptLines(chunk)}`;
                     {currentCalendarMoment.title}
                   </span>
                 </button>
-                <div style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 800, color: hpUi.calendarGold, opacity: 0.9 }}>
-                  {currentCalendarMoment.periodLabel || scenePeriod.label}
+                <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={advanceToNextPeriod}
+                    disabled={loading}
+                    title={nextPeriodButtonTitle}
+                    style={{
+                      minHeight: 24,
+                      padding: "0 9px",
+                      borderRadius: 999,
+                      border: `1px solid ${hpUi.line}`,
+                      background: hpUi.calendarChoiceBg,
+                      color: loading ? V.faint : hpUi.calendarText,
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      fontFamily: "inherit",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {nextPeriodButtonText}
+                  </button>
+                  <div style={{ fontSize: 10.5, fontWeight: 800, color: hpUi.calendarGold, opacity: 0.9, whiteSpace: "nowrap" }}>
+                    {currentCalendarMoment.periodLabel || scenePeriod.label}
+                  </div>
                 </div>
               </div>
               {calendarOpen && (
