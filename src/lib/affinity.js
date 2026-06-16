@@ -129,10 +129,10 @@ export function relationshipRulesBlock(characters = [], ocs = []) {
   return (
     "【关系与好感度规则（重要，务必执行）】\n" +
     "- 好感度只由系统结算；你不得在正文里写出具体数值，也不得自行宣布关系跨级、恋人或婚约。\n" +
-    "- 只要本轮玩家与某个可识别角色发生了直接互动（交谈、同行、帮忙、关心、冲突、并肩经历等），就必须在回复的最后另起一行，输出结构化标签：\n" +
+    "- 只有本轮玩家主动与某个可识别角色发生了直接互动（交谈、同行、帮忙、关心、冲突、并肩经历等），才可以在回复的最后另起一行，输出结构化标签：\n" +
     "  【关系变化：角色名+1】\n" +
     "  多个角色用「；」分隔，例如：【关系变化：哈利+1；罗恩-1】。\n" +
-    "- 仅擦肩而过、远远看见、单方面回忆或猜测，不写标签。\n" +
+    "- 仅擦肩而过、远远看见、单方面回忆或猜测、听见别人提到、角色与别人说话、角色只是看向玩家，都不写标签。\n" +
     "- 幅度要小：普通友好/尴尬 ±1，明显互助/冲突 ±2，强烈共同经历最多 ±3。\n" +
     "- 好感度≥60 只是心动/可告白，不等于恋人；恋人必须由系统告白结算成功后才成立。\n" +
     "- 标签只在回复最末单独成行，正文里不要出现「好感度」「+N」之类字样。\n" +
@@ -172,7 +172,9 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
   const hasAlias = (source, aliases) => aliases.some((alias) => source.includes(alias));
   const hasDialogue = (source, aliases) => aliases.some((alias) => new RegExp(`${escapeRegExp(alias)}[：:]`).test(source));
   const playerAliases = [...new Set(["你", "玩家", playerName, ...String(playerName || "").split(/[·・]/)].filter((x) => x && x.length >= 1))];
-  const mentionsPlayer = (source) => playerAliases.some((alias) => source.includes(alias));
+  const playerSocialIntent = /(?:说|问|回答|回应|聊天|交谈|打招呼|介绍|邀请|同行|一起|坐下|递给|接过|给|送|分享|帮|帮助|安慰|感谢|道歉|解释|劝|提醒|握手|并肩|保护|挡住|争执|对峙|找|走向|靠近|请求|拜托|说服)/.test(compactPlayer);
+  const groupSocialIntent = groupIntent && playerSocialIntent;
+  const openSocialIntent = playerSocialIntent && !/(?:远远|只是|只|看看|看见|观察|留意|注意|听见|听到|路过|擦肩|没有过去|不靠近|不打扰|不说话|不互动)/.test(compactPlayer);
   const isReferenceOnly = (source, aliases) => aliases.some((alias) => {
     const name = escapeRegExp(alias);
     return new RegExp(
@@ -205,7 +207,7 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
         return new RegExp(`${name}.{0,18}(对|向|朝|冲|看向|望向|转向|递给|交给|问|回答|回应|点头|微笑|笑|招手|让座|挪开|拍了拍).{0,18}${actor}|${name}[：:].{0,40}${actor}|${actor}.{0,16}(对|向|问|邀请|安慰|帮助|叫住).{0,16}${name}`).test(window);
       });
       if (directToPlayer) return true;
-      if (groupIntent && interactionWords.some((word) => window.includes(word))) return true;
+      if (groupSocialIntent && interactionWords.some((word) => window.includes(word))) return true;
     }
     return false;
   };
@@ -223,15 +225,15 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     const speaks = hasDialogue(aiText, aliases);
     const playerInteracted = hasPlayerInteractionNear(compactPlayer, aliases);
     const aiInteracted = hasAiDirectToPlayer(compactAi, aliases);
-    const directEvidence = playerInteracted || aiInteracted || (groupIntent && speaks);
+    const directEvidence = playerInteracted || ((openSocialIntent || groupSocialIntent) && aiInteracted) || (groupSocialIntent && speaks);
     const referenceOnly = isReferenceOnly(compactPlayer, aliases) || isReferenceOnly(compactAi, aliases);
     if ((absentInAi(aliases) || referenceOnly) && !directEvidence) continue;
     let score = 0;
     if (mentionedByPlayer && playerInteracted) score += 4;
     else if (mentionedByPlayer) score += 1;
-    if (groupIntent && speaks) score += 4;
-    if (aiInteracted) score += 3;
-    if (groupIntent && aiInteracted) score += 2;
+    if (groupSocialIntent && speaks) score += 4;
+    if ((openSocialIntent || groupSocialIntent) && aiInteracted) score += 3;
+    if (groupSocialIntent && aiInteracted) score += 2;
     if (mentionedByAi && !directEvidence && !mentionedByPlayer) score -= 2;
     if (directEvidence && score >= 3) scored.push({ ...c, score });
   }
