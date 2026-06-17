@@ -49,6 +49,7 @@ const lifeLog = [
   ok(candidates.some((c) => c.placeLabel === "图书馆"), "event pool prioritizes matched location");
   ok(candidates.some((c) => ["research_clue", "secret_clue"].includes(c.familyId)), "investigation at library suggests clue/research family");
   ok(rendered.includes("连续性") && rendered.includes("不能复读"), "repeated place/family receives progression guard");
+  ok(rendered.includes("推进方式") && candidates.some((c) => c.progression), "repeated event candidates carry concrete progression mode");
   ok(rendered.includes("赫敏"), "likely people can include relevant favor/recent character");
 }
 
@@ -65,6 +66,7 @@ const lifeLog = [
   ok(context.includes("动态事件候选"), "prompt context includes dynamic event candidates");
   ok(context.includes("礼堂"), "prompt context keeps location in candidates");
   ok(context.includes("不是按钮") && context.includes("不是固定剧情"), "event pool is framed as backend material, not fixed choices");
+  ok(!context.includes("当前是晚饭后，通常不适合直接展开"), "natural dinner location is not marked as timing mismatch");
 }
 
 {
@@ -78,6 +80,36 @@ const lifeLog = [
   });
   ok(candidates.some((c) => c.placeLabel === "禁书区" && c.familyId === "rule_risk"), "late restricted location includes rule-risk candidate");
   ok(candidates.some((c) => c.access === "restricted" && c.risk === "high"), "restricted candidate carries access and risk metadata");
+}
+
+{
+  const context = buildHogwartsLifeContext({
+    userText: "我上午去禁书区翻找资料。",
+    period: dayPeriod("morning"),
+    currentTimeLabel: "1991年9月3日",
+    currentState: { location: "图书馆" },
+    lifeLog: [],
+    characters: cast,
+    player: { favor: {} },
+  });
+  ok(context.includes("地点/时间约束"), "context includes location/time constraints for unnatural location");
+  ok(context.includes("禁书区") && context.includes("当前是上午") && context.includes("更自然的时段是夜晚、深夜"), "restricted section mismatch names current and natural periods");
+  ok(context.includes("限制区域") && context.includes("巡查"), "restricted access warning requires risk framing");
+}
+
+{
+  const context = buildHogwartsLifeContext({
+    userText: "我回图书馆继续查713号金库。",
+    period: dayPeriod("night"),
+    currentTimeLabel: "1991年9月4日",
+    currentState: { location: "图书馆" },
+    lifeLog,
+    characters: cast,
+    player: { favor: { hermione: 24 } },
+  });
+  ok(context.includes("具体前情回收"), "context includes concrete scene continuity block");
+  ok(context.includes("旧报纸线索") && context.includes("平斯夫人"), "continuity block preserves exact prior scene details");
+  ok(context.includes("不要重写同一幕"), "continuity block forbids replaying the same scene");
 }
 
 {

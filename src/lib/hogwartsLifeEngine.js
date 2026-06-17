@@ -395,6 +395,30 @@ const FAMILY_KEYWORDS = {
   consequence: ["上次", "昨天", "后来", "还记得", "再次"],
 };
 
+const ACCESS_LABELS = {
+  open: "开放地点",
+  calendar: "校历限定地点",
+  permission: "需要许可",
+  hidden: "隐藏区域",
+  restricted: "限制区域",
+  forbidden: "禁区",
+};
+
+const PROGRESSION_MODES = {
+  research_clue: ["让线索只前进一步，并保留缺口", "回收上次被打断的查阅余波", "同一资料给出新的误读或旁证"],
+  secret_clue: ["让异常与原著锚点保持边缘相关", "只露出痕迹，不揭开谜底", "把旧线索转成新的追问"],
+  canon_echo: ["让原著人物或事件从背景擦过", "只让玩家旁观大事件边缘", "用传闻或小细节回声，不改写原著结果"],
+  public_encounter: ["让对方记得上次反应，态度轻微变化", "把偶遇变成擦肩或短暂并行", "让旁人环境改变这次互动"],
+  friendship: ["推进一小步关系，不跨过门槛", "回收上次未说完的话", "用共同完成的小事制造余温"],
+  rivalry: ["让摩擦换一个触发点", "把上次敌意变成更克制的试探", "让旁观者反应改变冲突走向"],
+  rule_risk: ["换成新的巡查压力或规避方式", "让风险留下后续追问，而非必然被抓", "回收上次违规痕迹"],
+  quiet_moment: ["让环境和人物距离变化", "让安静里出现一个新的细节", "允许平静落空，但要记得上次余味"],
+  quiet_study: ["让查阅方式变化，不重复同一本书", "让安静被不同人物或规则打断", "让没有答案本身成为本轮变化"],
+  weather: ["让天气改变路线或人物距离", "用季节回收上次情绪", "让天气影响行动选择"],
+  lost_object: ["让物品成为上次事件的回声", "把归还或误拿变成新的关系触点", "让小物件留下可追踪后果"],
+  consequence: ["直接回收上次选择的生活后果", "让流言、惩罚或奖励轻微变形", "让未完成的小事回来找玩家"],
+};
+
 export const LIFE_SCENE_ENGINE_RULES =
   "【霍格沃茨生活场景引擎】\n" +
   "- 地点不是固定按钮，事件不是固定结算。请把地点、时间段、校历、人物关系、上一轮记忆和原著锚点组合成一次具体生活片段。\n" +
@@ -568,6 +592,92 @@ function recentLocationCount(lifeLog = [], label = "") {
   return (Array.isArray(lifeLog) ? lifeLog : []).slice(0, 8).filter((entry) => entry.location === label).length;
 }
 
+function recentEntriesForLocation(lifeLog = [], label = "", limit = 3) {
+  if (!label) return [];
+  return (Array.isArray(lifeLog) ? lifeLog : [])
+    .filter((entry) => entry?.location === label || String(entry?.scene || "").includes(label) || String(entry?.assistantText || "").includes(label))
+    .slice(0, Math.max(1, limit));
+}
+
+function compactSnippet(value, limit = 92) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function summarizeLifeEntry(entry) {
+  const scene = compactSnippet(entry?.scene || entry?.assistantText || entry?.userText, 96);
+  const clueTitles = (entry?.clues || []).map((clue) => clue?.title).filter(Boolean).slice(0, 3);
+  const roll = compactSnippet(entry?.rollLine, 48);
+  return [scene, clueTitles.length ? `线索：${clueTitles.join("、")}` : "", roll].filter(Boolean).join("；");
+}
+
+function uniquePlaces(places = []) {
+  return (places || []).filter((place, index, arr) => place && arr.findIndex((x) => x?.id === place.id) === index);
+}
+
+function locationTimingConstraintLines(places = [], periodId = "morning", periodLabel = "") {
+  const lines = [];
+  for (const place of uniquePlaces(places)) {
+    const periods = place.periods || [];
+    const allowed = periods.includes(periodId);
+    if (!allowed) {
+      const natural = periods.map((id) => {
+        if (id === "morning") return "上午";
+        if (id === "afternoon") return "下午";
+        if (id === "dinner") return "晚饭后";
+        if (id === "night") return "夜晚";
+        if (id === "late") return "深夜";
+        return id;
+      }).join("、");
+      lines.push(`${place.label}：当前是${periodLabel || periodId}，通常不适合直接展开；更自然的时段是${natural || "特定校历节点"}。除非玩家明确坚持，应写成被阻止、延后、擦边经过、寻求许可或只留下远处迹象。`);
+    }
+    if (["hidden", "restricted", "forbidden", "permission", "calendar"].includes(place.access)) {
+      lines.push(`${place.label}：${ACCESS_LABELS[place.access] || place.access}；进入、停留或发现都需要清楚的入口、许可、巡查、见证者或后果风险。`);
+    }
+  }
+  return lines.slice(0, 6);
+}
+
+function buildSceneContinuityHints({ places = [], lifeLog = [], limit = 4 } = {}) {
+  const labels = new Set(uniquePlaces(places).map((place) => place.label));
+  const hints = [];
+  for (const place of uniquePlaces(places)) {
+    const recent = recentEntriesForLocation(lifeLog, place.label, 2);
+    for (const entry of recent) {
+      const summary = summarizeLifeEntry(entry);
+      if (!summary) continue;
+      hints.push(`${place.label}上次：${summary}；本次必须体现新反应、余波、线索小进展、关系变化或平静落空，不要重写同一幕。`);
+    }
+  }
+  if (hints.length < limit) {
+    for (const entry of (Array.isArray(lifeLog) ? lifeLog : []).slice(0, 8)) {
+      if (entry?.location && labels.has(entry.location)) continue;
+      const summary = summarizeLifeEntry(entry);
+      if (!summary) continue;
+      const label = entry.location || "近期事件";
+      hints.push(`${label}前情：${summary}；若本轮触及相同人物、物品或线索，要让过去留下痕迹。`);
+      if (hints.length >= limit) break;
+    }
+  }
+  return hints.slice(0, Math.max(1, limit));
+}
+
+function chooseProgressionMode({ familyId, placeLabel, userText, lifeLog, locationRepeats = 0, familyRepeats = 0 } = {}) {
+  if (!locationRepeats && !familyRepeats) return "";
+  const familyModes = PROGRESSION_MODES[familyId] || [
+    "记得上次事件，并让这次有新反应",
+    "把同类事件变形成不同结果",
+    "让后果微小推进或暂时落空",
+  ];
+  const mode = familyModes[stableHash(`${familyId}|${placeLabel}|${userText}|${lifeLog?.length || 0}|${locationRepeats}|${familyRepeats}`) % familyModes.length];
+  const repeatNote = [
+    locationRepeats ? `同地点已出现${locationRepeats}次` : "",
+    familyRepeats ? `同类事件已出现${familyRepeats}次` : "",
+  ].filter(Boolean).join("，");
+  return repeatNote ? `${mode}（${repeatNote}）` : mode;
+}
+
 function findCurrentLocation(currentState) {
   const location = currentState?.location || "";
   if (!location) return null;
@@ -635,11 +745,11 @@ export function buildLifeEventCandidates({
   const matched = matchHogwartsLocations(userText, 4);
   const currentPlace = findCurrentLocation(currentState);
   const periodPlaces = locationsForPeriod(period?.id, 10);
-  const places = [
+  const places = uniquePlaces([
     ...matched,
     ...(currentPlace ? [currentPlace] : []),
     ...periodPlaces,
-  ].filter((place, index, arr) => place && arr.findIndex((x) => x.id === place.id) === index).slice(0, 10);
+  ]).slice(0, 10);
   const intentBuckets = inferIntentBuckets(userText);
   const intentFamilies = new Set([...intentBuckets].flatMap((bucket) => FAMILY_INTENT_WEIGHTS[bucket] || []));
   const recentFamilies = recentFamilyCounts(lifeLog);
@@ -664,6 +774,7 @@ export function buildLifeEventCandidates({
       const familyRepeats = recentFamilies[familyId] || 0;
       const people = resolvePeopleHints(place, { userText, characters, ocs, player, lifeLog });
       const variant = chooseVariant(familyId, `${userText}|${periodId}|${place.id}|${lifeLog.length}`);
+      const progression = chooseProgressionMode({ familyId, placeLabel: place.label, userText, lifeLog, locationRepeats, familyRepeats });
       candidates.push({
         id: `${place.id}:${familyId}:${periodId}`,
         placeId: place.id,
@@ -676,6 +787,7 @@ export function buildLifeEventCandidates({
         unavailable,
         people,
         variant,
+        progression,
         continuity: [
           locationRepeats ? `最近已到过${place.label}，本次必须有新反应、余波或关系进展` : "",
           familyRepeats ? `同类事件近期出现过，不能复读；要回收、变形或推进` : "",
@@ -695,8 +807,9 @@ export function formatEventCandidate(candidate) {
   const access = candidate.access && candidate.access !== "open" ? `；${candidate.access}` : "";
   const risk = candidate.risk && candidate.risk !== "low" ? `；风险${candidate.risk}` : "";
   const unavailable = candidate.unavailable ? "；当前时段不自然，除非玩家明确坚持，否则改为擦边/延后/被阻止" : "";
+  const progression = candidate.progression ? `；推进方式：${candidate.progression}` : "";
   const continuity = candidate.continuity ? `；连续性：${candidate.continuity}` : "";
-  return `${candidate.placeLabel} × ${candidate.familyLabel}：${candidate.variant}${people}${access}${risk}${unavailable}${continuity}`;
+  return `${candidate.placeLabel} × ${candidate.familyLabel}：${candidate.variant}${people}${access}${risk}${unavailable}${progression}${continuity}`;
 }
 
 export function buildHogwartsLifeContext({
@@ -712,11 +825,19 @@ export function buildHogwartsLifeContext({
   player = {},
 } = {}) {
   const matched = matchHogwartsLocations(userText);
+  const currentPlace = findCurrentLocation(currentState);
   const periodPlaces = locationsForPeriod(period?.id, 10);
   const places = matched.length ? matched : periodPlaces;
+  const relevantPlaces = uniquePlaces([
+    ...matched,
+    ...(currentPlace ? [currentPlace] : []),
+  ]);
+  const constraintPlaces = matched.length ? matched : (currentPlace ? [currentPlace] : []);
   const continuity = recentContinuityLines(currentState, storyMemory, worldMemory);
   const roleplayIntents = inferRoleplayIntent(userText);
   const eventCandidates = buildLifeEventCandidates({ userText, period, currentState, lifeLog, characters, ocs, player, limit: 5 });
+  const timingConstraints = locationTimingConstraintLines(constraintPlaces, period?.id, period?.label);
+  const sceneContinuity = buildSceneContinuityHints({ places: relevantPlaces.length ? relevantPlaces : places, lifeLog, limit: 4 });
   const familyIds = new Set();
   places.forEach((place) => (place.eventFamilies || []).forEach((id) => familyIds.add(id)));
   const familyLines = [...familyIds].slice(0, 12).map((id) => `- ${FAMILY_MAP.get(id) || id}`);
@@ -728,9 +849,11 @@ export function buildHogwartsLifeContext({
     matched.length
       ? `玩家意图匹配地点：\n- ${matched.map(formatLocationBrief).join("\n- ")}`
       : `此时间段自然可活动地点示例：\n- ${places.map(formatLocationBrief).join("\n- ")}`,
+    timingConstraints.length ? `地点/时间约束（后台规则，不是给玩家看的选项）：\n- ${timingConstraints.join("\n- ")}` : "",
     familyLines.length ? `可组合事件族：\n${familyLines.join("\n")}` : "",
     eventCandidates.length ? `动态事件候选（后台素材，不是按钮，不是固定剧情；每轮只选最自然的一到两个）：\n- ${eventCandidates.map(formatEventCandidate).join("\n- ")}` : "",
     roleplayIntents.length ? `从玩家扮演行为推断出的软倾向（不是按钮，不是固定结果）：\n- ${roleplayIntents.join("\n- ")}` : "",
+    sceneContinuity.length ? `具体前情回收（重复地点/人物/物品/线索时优先使用这一段）：\n- ${sceneContinuity.join("\n- ")}` : "",
     continuity.length ? `近期连续性线索（同类事件再次出现时必须变化或推进）：\n- ${continuity.join("\n- ")}` : "",
     "本轮请只选择最自然的一到两个地点/事件族组合，不要穷举；如果与过去事件相似，必须写出差异、后果或进展。",
   ].filter(Boolean).join("\n");
