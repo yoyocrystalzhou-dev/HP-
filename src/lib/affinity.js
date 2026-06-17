@@ -132,6 +132,7 @@ export function relationshipRulesBlock(characters = [], ocs = []) {
     "- 只有本轮玩家主动与某个可识别角色发生了直接互动（交谈、同行、帮忙、关心、冲突、并肩经历等），才可以在回复的最后另起一行，输出结构化标签：\n" +
     "  【关系变化：角色名+1】\n" +
     "  多个角色用「；」分隔，例如：【关系变化：哈利+1；罗恩-1】。\n" +
+    "- 角色必须真实在本场景中与玩家直接互动才写标签；只是被提到、被旁听、出现在传闻/命令/回忆/背景描述中，都不写。\n" +
     "- 仅擦肩而过、远远看见、单方面回忆或猜测、听见别人提到、角色与别人说话、角色只是看向玩家，都不写标签。\n" +
     "- 幅度要小：普通友好/尴尬 ±1，明显互助/冲突 ±2，强烈共同经历最多 ±3。\n" +
     "- 好感度≥60 只是心动/可告白，不等于恋人；恋人必须由系统告白结算成功后才成立。\n" +
@@ -246,11 +247,13 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
 
 export function filterRelationshipDeltasByEvidence(entries = [], userText, characters = [], ocs = [], opts = {}) {
   if (!entries.length) return [];
+  const hasPresenceLock = Array.isArray(opts.presentCharacterIds);
+  const present = new Set(hasPresenceLock ? opts.presentCharacterIds.filter(Boolean) : []);
   const evidence = inferFavorDeltas(userText, characters, ocs, {
     aiText: opts.aiText || "",
     playerName: opts.playerName || "",
     maxEntries: 6,
   });
   const allowed = new Set(evidence.map((entry) => entry.id));
-  return entries.filter((entry) => allowed.has(entry.id));
+  return entries.filter((entry) => allowed.has(entry.id) && (!hasPresenceLock || present.has(entry.id)));
 }

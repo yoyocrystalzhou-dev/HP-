@@ -52,7 +52,7 @@ import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShop
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import { AMBIGUOUS_ATMOSPHERE_STYLE } from "./lib/writingStyle.js";
-import { applyLifeLogUpdate, createLifeLogEntry, formatLifeLogBlock } from "./lib/lifeLog.js";
+import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, formatLifeLogBlock } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -1204,6 +1204,10 @@ ${transcriptLines(chunk)}`;
       let relationshipLine = "";
       let clueLine = "";
       let appliedRelationship = [];
+      const presentCharacterIds = HP_KIOSK && activeMode === "world"
+        ? detectCharacterRefs(`${lastUserForMechanics.display || ""}\n${visibleText}`, projectChars, activeProject?.ocs || [], { mode: "present" }).map((entry) => entry.id)
+        : [];
+      const presentCharacterSet = new Set(presentCharacterIds);
 
       if (daily.entries.length) {
         patchProject((p) => {
@@ -1216,7 +1220,7 @@ ${transcriptLines(chunk)}`;
         lastUserForMechanics.display || "",
         projectChars,
         activeProject?.ocs || [],
-        { aiText: visibleText, playerName: player.name }
+        { aiText: visibleText, playerName: player.name, presentCharacterIds }
       );
       if (allowRelationshipDeltas) {
         // 兜底/补全：从玩家这轮可见输入里识别直接互动到的角色，对 AI 没有给出变化的角色
@@ -1228,7 +1232,10 @@ ${transcriptLines(chunk)}`;
         });
         if (inferred.length) {
           const have = new Set(relEntries.map((e) => e.id));
-          relEntries = [...relEntries, ...inferred.filter((e) => !have.has(e.id))];
+          relEntries = [
+            ...relEntries,
+            ...inferred.filter((e) => !have.has(e.id) && presentCharacterSet.has(e.id)),
+          ];
         }
       }
       if (relEntries.length) {
