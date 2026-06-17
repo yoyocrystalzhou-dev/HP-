@@ -11,7 +11,7 @@ import { clueSummary } from "../lib/clues.js";
  *
  * props: { player, variant: "rail" | "sheet", onClose }
  */
-import { favorStage } from "../lib/affinity.js";
+import { favorStage, relationshipGate } from "../lib/affinity.js";
 import Avatar from "./Avatar.jsx";
 
 export default function StatusBar({ player, variant = "rail", uiMode = "night", section = "all", onClose, ocs = [], clues = [], houseCup = null, onAddOc, onRemoveOc, favorList = [], onRestart }) {
@@ -189,8 +189,10 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
             </div>
           ) : favorList.map((f, i) => {
             const stage = favorStage(f.value, f.relationship);
+            const gate = relationshipGate(f.value, f.relationship);
             const sub = f.relationship?.feeling || f.relationship?.status || f.sub;
             const isLover = stage === "恋人";
+            const recent = f.relationship?.events?.[0] || null;
             return (
               <div key={f.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
                 <Avatar value={f.avatar} fallback="🧙" size={38} radius={11}
@@ -209,6 +211,14 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
                   </div>
                   {sub && (
                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>
+                  )}
+                  <div style={{ fontSize: 10.2, color: C.goldDim, marginTop: 4, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    下一门槛：{gate.next}
+                  </div>
+                  {recent && (
+                    <div style={{ fontSize: 10.2, color: C.muted, marginTop: 3, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      最近：{[recent.location, recent.scene || recent.note].filter(Boolean).join(" · ")}
+                    </div>
                   )}
                 </div>
               </div>

@@ -40,7 +40,7 @@ import { parseActionCommand, runAction, formatRoll, checkAnchor, checkEffects } 
 import { createOC, formatOcs, OC_GUARD } from "./lib/oc.js";
 import {
   favorStage, favorDelta, findCharacter, formatFavorBlock, socialAnchor,
-  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock, inferFavorDeltas, filterRelationshipDeltasByEvidence,
+  parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock, inferFavorDeltas, filterRelationshipDeltasByEvidence, RELATIONSHIP_EVENT_LIMIT,
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
@@ -52,7 +52,7 @@ import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShop
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import { AMBIGUOUS_ATMOSPHERE_STYLE } from "./lib/writingStyle.js";
-import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, formatLifeLogBlock } from "./lib/lifeLog.js";
+import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, detectLifeLocation, formatLifeLogBlock } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -873,7 +873,7 @@ export default function App() {
         ...projectChars.map((c) => [c.id, c.name]),
         ...(activeProject?.ocs || []).map((o) => [o.id, o.name]),
       ]);
-      const favorBlock = formatFavorBlock(player.favor, favorNameById);
+      const favorBlock = formatFavorBlock(player.favor, favorNameById, player.state?.relationships || {});
       if (favorBlock) parts.push(favorBlock);
       parts.push(relationshipRulesBlock(projectChars, activeProject?.ocs));
       const clueBlock = formatCluesBlock(clues);
@@ -1248,11 +1248,20 @@ ${transcriptLines(chunk)}`;
         }
       }
       if (relEntries.length) {
-        const appliedPreview = applyRelationshipDeltas(player, relEntries).applied;
+        const relationshipLocation = detectLifeLocation(`${lastUserForMechanics.display || ""}\n${visibleText}`, activeProject?.currentState?.location || "");
+        const relationshipContext = {
+          date: activeProject?.currentTimeLabel || "",
+          periodLabel: scenePeriod.label,
+          location: relationshipLocation,
+          scene: visibleText,
+          userText: lastUserForMechanics.display || "",
+          source: "daily",
+        };
+        const appliedPreview = applyRelationshipDeltas(player, relEntries, relationshipContext).applied;
         appliedRelationship = appliedPreview;
         patchProject((p) => {
           const pc = p.playerCharacter || {};
-          const result = applyRelationshipDeltas(pc, relEntries);
+          const result = applyRelationshipDeltas(pc, relEntries, relationshipContext);
           return { ...p, playerCharacter: result.player };
         });
         relationshipLine = formatRelationshipDeltaLine(appliedPreview);
@@ -1446,10 +1455,27 @@ ${transcriptLines(chunk)}`;
             patchProject((p) => {
               const pc = p.playerCharacter || {};
               const state = { ...(pc.state || {}), relationships: { ...(pc.state?.relationships || {}) } };
+              const previous = state.relationships[tgt.id] || {};
+              const event = {
+                date: p.currentTimeLabel || "",
+                period: dayPeriod(p.dayPeriod || "morning").label,
+                location: p.currentState?.location || "",
+                scene: `告白成功，关系正式确认。`,
+                note: "告白成功，关系正式确认。",
+                delta: 0,
+                value: fav,
+                stage: "恋人",
+                source: "confession",
+                createdAt: Date.now(),
+              };
               state.relationships[tgt.id] = {
-                ...(state.relationships[tgt.id] || {}),
+                ...previous,
                 status: "恋人",
                 feeling: "告白成功，关系正式确认。",
+                events: [event, ...(Array.isArray(previous.events) ? previous.events : [])].slice(0, RELATIONSHIP_EVENT_LIMIT),
+                interactionCount: Number(previous.interactionCount || 0) + 1,
+                lastInteraction: event.scene,
+                lastInteractionAt: event.createdAt,
                 updatedAt: Date.now(),
               };
               return { ...p, playerCharacter: { ...pc, state } };
@@ -1511,8 +1537,20 @@ ${transcriptLines(chunk)}`;
             patchProject((p) => {
               const pc = p.playerCharacter || {};
               const stats = { ...(pc.stats || {}) }; deduct(stats);
-              const favor = { ...(pc.favor || {}) }; favor[tgt.id] = newFavor;
-              return { ...p, playerCharacter: { ...pc, stats, favor } };
+              const result = applyRelationshipDeltas(pc, [{
+                id: tgt.id,
+                name: tgt.name,
+                kind: tgt.kind,
+                delta: dF,
+                note: check.tier,
+              }], {
+                date: p.currentTimeLabel || "",
+                periodLabel: dayPeriod(p.dayPeriod || "morning").label,
+                location: p.currentState?.location || "",
+                scene: `${cmd.action.label || "社交互动"}：${check.tier}`,
+                source: "check",
+              });
+              return { ...p, playerCharacter: { ...result.player, stats } };
             });
           } else {
             actionAnchor = checkAnchor(cmd.action, check, cmd.target || "（未指定对象）");

@@ -75,7 +75,8 @@ function CharacterEditor({ char: init, candidates, isPlayer, onSave, onCancel })
     for (const r of rels) {
       const target = resolveTarget(r.text);
       if (!target) continue;
-      relationships[target] = { status: r.status || "", feeling: r.feeling || "", note: r.note || "", updatedAt: Date.now() };
+      const previous = init.state?.relationships?.[target] || {};
+      relationships[target] = { ...previous, status: r.status || "", feeling: r.feeling || "", note: r.note || "", updatedAt: Date.now() };
     }
     const state = createCharacterState({ status: c.state?.status || "", relationships });
     onSave({ ...c, state, history: c.history || [] });

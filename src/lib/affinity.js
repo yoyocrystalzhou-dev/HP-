@@ -8,6 +8,7 @@
 
 export const FAVOR_MAX = 100;
 export const CONFESSION_THRESHOLD = 60;
+export const RELATIONSHIP_EVENT_LIMIT = 8;
 
 /** 好感度 → 阶段。 */
 export function favorStage(v, relationship = null) {
@@ -23,6 +24,24 @@ export function favorStage(v, relationship = null) {
 /** 检定等级 → 好感度增减。 */
 export function favorDelta(tier) {
   return { 大成功: 6, 成功: 3, 失败: 0, 大失败: -2 }[tier] ?? 0;
+}
+
+export function relationshipGate(value, relationship = null) {
+  const stage = favorStage(value, relationship);
+  const n = Number(value || 0);
+  if (stage === "恋人") {
+    return { stage, next: "恋人关系", progress: 100, canConfess: true, line: "恋人关系可体现亲密与偏爱，但不得改写原著大事件。" };
+  }
+  if (n >= CONFESSION_THRESHOLD) {
+    return { stage, next: "告白/明确确认关系", progress: n, canConfess: true, line: "已达到心动/可告白门槛；仍需明确告白或关系确认，并由系统结算后才会成为恋人。" };
+  }
+  if (n >= 41) {
+    return { stage, next: "心动/可告白", progress: n, canConfess: false, line: `距离心动门槛还差 ${CONFESSION_THRESHOLD - n}；适合慢热靠近、共同经历或试探，不可直接成为恋人。` };
+  }
+  if (n >= 21) {
+    return { stage, next: "亲密朋友", progress: n, canConfess: false, line: `距离亲密朋友还差 ${41 - n}；适合熟悉、互助、误会修复，不要突然亲密。` };
+  }
+  return { stage, next: "朋友", progress: n, canConfess: false, line: `距离朋友还差 ${21 - n}；当前更适合初识、试探、礼貌或轻微摩擦。` };
 }
 
 /** 在 canon 角色 + OC 里按名字宽松匹配。返回 { id, name, kind } 或 null。 */
@@ -41,12 +60,33 @@ export function findCharacter(name, characters = [], ocs = []) {
   );
 }
 
+function compactRelEvent(event = {}) {
+  const bits = [
+    event.date,
+    event.location,
+    event.scene || event.note,
+    Number(event.delta || 0) ? `${event.delta > 0 ? "+" : ""}${event.delta}` : "",
+  ].filter(Boolean);
+  return bits.join("｜");
+}
+
 /** 注入 prompt：玩家已建立的关系（好感度>0）。让 AI 据此体现亲疏。 */
-export function formatFavorBlock(favor = {}, nameById = {}) {
+export function formatFavorBlock(favor = {}, nameById = {}, relationships = {}) {
   const lines = Object.entries(favor)
     .filter(([, v]) => Number(v) > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([id, v]) => `${nameById[id] || id}：${favorStage(v)}（好感度 ${Math.round(v)}）`);
+    .map(([id, v]) => {
+      const rel = relationships?.[id] || {};
+      const gate = relationshipGate(v, rel);
+      const recent = (rel.events || []).slice(0, 2).map(compactRelEvent).filter(Boolean);
+      return [
+        `${nameById[id] || id}：${gate.stage}（好感度 ${Math.round(v)}；下一门槛：${gate.next}）`,
+        rel.feeling ? `感受：${rel.feeling}` : "",
+        rel.note ? `备注：${rel.note}` : "",
+        recent.length ? `最近互动：${recent.join("；")}` : "",
+        `门槛提示：${gate.line}`,
+      ].filter(Boolean).join("；");
+    });
   if (!lines.length) return null;
   return (
     "【玩家与角色的好感度（据此体现亲疏；不得自行宣布关系跨级升级；好感度≥60只是心动/可告白，不等于恋人）】\n- " +
@@ -85,7 +125,23 @@ export function parseRelationshipDeltas(text, characters = [], ocs = []) {
   return { cleaned, entries };
 }
 
-export function applyRelationshipDeltas(player, entries = []) {
+function relationshipEvent(entry, value, stage, context = {}) {
+  const scene = String(context.scene || context.userText || entry.note || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  return {
+    date: context.date || "",
+    period: context.periodLabel || "",
+    location: context.location || "",
+    scene,
+    note: entry.note || context.note || "",
+    delta: entry.delta,
+    value,
+    stage,
+    source: context.source || "daily",
+    createdAt: context.createdAt || Date.now(),
+  };
+}
+
+export function applyRelationshipDeltas(player, entries = [], context = {}) {
   const next = {
     ...player,
     favor: { ...(player?.favor || {}) },
@@ -102,13 +158,22 @@ export function applyRelationshipDeltas(player, entries = []) {
     next.favor[entry.id] = value;
 
     const rel = next.state.relationships[entry.id] || {};
+    const stage = favorStage(value, rel);
+    const event = relationshipEvent(entry, value, stage, context);
+    const events = [event, ...(Array.isArray(rel.events) ? rel.events : [])]
+      .filter((item) => item && (item.scene || item.note || item.delta))
+      .slice(0, RELATIONSHIP_EVENT_LIMIT);
     next.state.relationships[entry.id] = {
       ...rel,
-      status: rel.status === "恋人" ? "恋人" : favorStage(value),
-      feeling: entry.note || rel.feeling || "",
+      status: rel.status === "恋人" ? "恋人" : stage,
+      feeling: context.source === "check" ? (rel.feeling || "") : (entry.note || rel.feeling || ""),
+      events,
+      interactionCount: Number(rel.interactionCount || 0) + 1,
+      lastInteractionAt: event.createdAt,
+      lastInteraction: event.scene || event.note || "",
       updatedAt: Date.now(),
     };
-    applied.push({ ...entry, oldValue, value, stage: favorStage(value, next.state.relationships[entry.id]) });
+    applied.push({ ...entry, oldValue, value, stage: favorStage(value, next.state.relationships[entry.id]), event });
   }
 
   return { player: next, applied };
