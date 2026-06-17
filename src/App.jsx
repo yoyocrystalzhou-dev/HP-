@@ -51,6 +51,7 @@ import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExa
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
+import { AMBIGUOUS_ATMOSPHERE_STYLE } from "./lib/writingStyle.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -765,6 +766,7 @@ export default function App() {
     // 立刻作用于已有存档，而不是停留在建档时烘焙进项目的旧副本。其余项目用自身 instructions。
     const liveInstructions = activePreset?.instructions || activeProject?.instructions;
     if (liveInstructions?.trim()) parts.push(liveInstructions.trim());
+    parts.push(AMBIGUOUS_ATMOSPHERE_STYLE);
 
     const projectFileBlocks = formatProjectFiles(projectFiles);
     if (projectFileBlocks.length) parts.push(`【项目文件】\n${projectFileBlocks.join("\n\n")}`);
