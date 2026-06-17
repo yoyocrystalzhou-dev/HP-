@@ -82,6 +82,7 @@ const V = T;
 // HP 专项：玩家成品模式。世界数据（角色/世界书/记忆/文件/剧情状态）全部内置存储、不暴露
 // 成可视化管理面板；玩家界面只保留对话 + （后续）养成数值。仅留「配置」用于填 API Key。
 const HP_KIOSK = true;
+const HP_REPLY_TOKEN_CAP = 720;
 
 /** Format one relationship entry as a compact line. */
 function formatRel(rel) {
@@ -912,7 +913,7 @@ export default function App() {
       const pst = formatState(player.state, nameMap);
       if (pst.length) pseg.push(`(状态) ${pst.join("；")}`);
       parts.push(pseg.join("\n"));
-      parts.push(`你是这个世界的旁白。用户扮演「${player.name}」。请进行场景描写、推进剧情，并在需要时扮演任意出场角色（用「角色名：」标明发言），但不要替「${player.name}」作主。保持与上述世界状态一致。`);
+      parts.push(`你是这个世界的旁白。用户扮演「${player.name}」。请描写场景、NPC 反应与当前行动的即时后果，并在需要时扮演任意出场角色（用「角色名：」标明发言）；不要替「${player.name}」作主、发言、移动地点或完成下一步行动。保持与上述世界状态一致。`);
     } else {
       // Single character POV. Never inject OTHER AI characters' state/history.
       if (activeChar?.persona?.trim()) parts.push(`【你的角色：${activeChar.name}】\n${activeChar.persona.trim()}`);
@@ -1196,8 +1197,11 @@ ${transcriptLines(chunk)}`;
     try {
       const apiMsgs = compactMessagesForAPI(baseMessages).map((m) => ({ role: m.role, content: m.content }));
       const sys = buildSystem(promptText);
+      const replyConfig = HP_KIOSK && activeMode === "world"
+        ? { ...config, maxTokens: Math.min(Number(config.maxTokens || HP_REPLY_TOKEN_CAP), HP_REPLY_TOKEN_CAP) }
+        : config;
 
-      const finalText = await callAPI(config, apiMsgs, sys, (chunk) => {
+      const finalText = await callAPI(replyConfig, apiMsgs, sys, (chunk) => {
         const visibleChunk = stripHiddenSystemResidue(chunk);
         setSessions((prev) => {
           const s = prev[sid];
@@ -2607,7 +2611,7 @@ ${transcriptLines(chunk)}`;
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
-              placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
+              placeholder={activeMode === "world" ? "描述你的行动 / 回应场景…" : `和 ${activeChar.name} 说话…`}
               rows={1}
               style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: isMobile ? 1.25 : 1.35, minHeight: isMobile ? 24 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: isMobile ? "2px 0" : "3px 0" }}
             />

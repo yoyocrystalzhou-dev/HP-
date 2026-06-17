@@ -20,6 +20,9 @@ const ok = (cond, msg) => {
   ok(AMBIGUOUS_ATMOSPHERE_STYLE.includes("隐藏文风指令") && AMBIGUOUS_ATMOSPHERE_STYLE.includes("不要说破"), "ambiguous atmosphere style remains available");
   ok(HP_NARRATION_GUARD.includes("专属于 Harry Potter / Hogwarts") && HP_NARRATION_GUARD.includes("不要提到 prompt"), "HP narration guard keeps project and meta-output boundaries");
   ok(HP_NARRATION_GUARD.includes("标签必须完整闭合"), "HP narration guard requires closed backend tags");
+  ok(HP_NARRATION_GUARD.includes("300-550") && HP_NARRATION_GUARD.includes("写到玩家需要再次行动或回应的位置就停笔"), "HP narration guard keeps visible replies paced and stoppable");
+  ok(HP_NARRATION_GUARD.includes("文风只影响描写质感") && HP_NARRATION_GUARD.includes("不得替玩家说话"), "HP narration guard protects player agency from style-driven autopilot");
+  ok(AMBIGUOUS_ATMOSPHERE_STYLE.includes("不是篇幅失控") && AMBIGUOUS_ATMOSPHERE_STYLE.includes("1-2 个感官细节"), "ambiguous atmosphere style is capped to texture rather than long-form expansion");
   ok(!HP_NARRATION_GUARD.includes("非 HP"), "HP guard does not frame the simulator as a non-HP fallback");
 }
 
@@ -48,7 +51,12 @@ const ok = (cond, msg) => {
 // 4. App wiring injects the guard and applies final visible cleanup.
 {
   const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const preset = readFileSync(new URL("../src/presets/childGen/index.js", import.meta.url), "utf8");
   ok(app.includes("HP_NARRATION_GUARD") && app.includes("parts.push(HP_NARRATION_GUARD)"), "App injects HP narration guard into system prompt");
+  ok(app.includes("HP_REPLY_TOKEN_CAP") && app.includes("Math.min(Number(config.maxTokens || HP_REPLY_TOKEN_CAP), HP_REPLY_TOKEN_CAP)"), "App hard-caps visible HP narrative replies");
+  ok(app.includes("NPC 反应与当前行动的即时后果") && !app.includes("推进剧情，并"), "App base narrator prompt avoids autopilot plot advancement");
+  ok(app.includes("描述你的行动 / 回应场景") && !app.includes("描述你的行动 / 推进剧情"), "Player input placeholder frames roleplay as responding instead of autopilot progression");
+  ok(preset.includes("文风只负责氛围与质感") && preset.includes("写到玩家需要回应或行动的位置就停下"), "Preset writing rules preserve player agency");
   ok(app.includes("stripHiddenSystemResidue("), "App cleans final visible text after parsing backend tags");
   ok(app.includes("const visibleChunk = stripHiddenSystemResidue(chunk)") && app.includes("content: visibleChunk"), "App cleans streaming chunks before display");
 }
