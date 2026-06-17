@@ -708,15 +708,6 @@ function resolvePeopleHints(place, { userText = "", characters = [], ocs = [], p
     const short = c.name.split(/[·・]/).filter(Boolean);
     if (compact.includes(c.name) || short.some((x) => x.length >= 2 && compact.includes(x))) addHint(c.name);
   }
-  const favor = player?.favor || {};
-  Object.entries(favor)
-    .filter(([, value]) => Number(value) >= 20)
-    .sort((a, b) => Number(b[1]) - Number(a[1]))
-    .slice(0, 2)
-    .forEach(([id]) => {
-      const target = all.find((c) => c.id === id);
-      if (target) addHint(target.name);
-    });
   for (const entry of (Array.isArray(lifeLog) ? lifeLog : []).slice(0, 4)) {
     if (entry.location !== place?.label) continue;
     for (const id of [...(entry.presentCharacterIds || []), ...(entry.interactionCharacterIds || [])]) {

@@ -44,6 +44,7 @@ import {
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
+import { buildPresenceContext } from "./lib/presence.js";
 import { dayPeriod, advanceCalendarClock, calendarMoment, buildCalendarChoiceInput, scheduleContext, formatScheduleContextBlock } from "./lib/schoolCalendar.js";
 import { timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
@@ -838,6 +839,16 @@ export default function App() {
         ocs: activeProject?.ocs,
         player,
       }));
+      const presenceBlock = buildPresenceContext({
+        userText,
+        period: scenePeriod,
+        currentState: activeProject?.currentState,
+        lifeLog: activeProject?.lifeLog,
+        characters: projectChars,
+        ocs: activeProject?.ocs,
+        player,
+      });
+      if (presenceBlock) parts.push(presenceBlock);
     }
     // HP 专项：注入当前时间对应的原著剧情锚点（防跑偏）。位于硬规则之下、当前状态之上。
     if (currentCanonBeat) parts.push(canonAnchor(currentCanonBeat));
