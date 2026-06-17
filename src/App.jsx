@@ -56,7 +56,7 @@ import { AMBIGUOUS_ATMOSPHERE_STYLE } from "./lib/writingStyle.js";
 import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, detectLifeLocation, formatLifeLogBlock } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
-import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
+import { BackgroundOrnaments, DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
 import dayFrameUrl from "./assets/day-frame.png";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ export default function App() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  const inputMaxHeight = isMobile ? 118 : 220;
+  const inputMaxHeight = isMobile ? 76 : 180;
 
   // ── Derived: project / mode / character / active chat window ──
   const activeProject = (activeProjectId && projects[activeProjectId]) || null;
@@ -179,10 +179,10 @@ export default function App() {
       const o = ocById[id] || {};
       const sub = [o.gender, o.house].filter(Boolean).join(" · ")
         || (o.tieName ? `${o.tieName} 的${o.tieRelation || "熟人"}` : "原创角色");
-      return { avatar: o.gender === "女" ? "🧙‍♀️" : o.gender === "男" ? "🧙‍♂️" : "🧙", sub };
+      return { avatar: "OC", sub };
     }
     const c = charsById[id] || {};
-    return { avatar: c.avatar || "🧙", sub: "原著角色" };
+    return { avatar: (c.name || "?").slice(0, 1), sub: "原著角色" };
   };
   const favorList     = [
     ...Object.entries(player.favor || {})
@@ -1819,11 +1819,11 @@ ${transcriptLines(chunk)}`;
         boxShadow: panel ? "0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,250,226,0.05)" : "none",
       };
   const hpSheetChrome = {
-    width: "min(92vw, 560px)",
-    maxHeight: "78vh",
+    width: isMobile ? "100%" : "min(92vw, 560px)",
+    maxHeight: isMobile ? "86dvh" : "78vh",
     overflow: "auto",
     border: `1px solid ${hpUi.inputBorder}`,
-    borderRadius: hpIsNight ? 18 : 12,
+    borderRadius: isMobile ? "18px 18px 0 0" : (hpIsNight ? 18 : 12),
     background: hpIsNight
       ? "linear-gradient(180deg, rgba(20,20,28,0.98), rgba(10,11,16,0.99))"
       : "linear-gradient(180deg, rgba(255,255,250,0.97), rgba(231,219,199,0.96))",
@@ -1877,6 +1877,7 @@ ${transcriptLines(chunk)}`;
 
       {/* HP 专项：夜间星尘 / 日间纸纹花饰 */}
       {HP_KIOSK && hpIsNight && <Starfield count={70} tone={hpTone} />}
+      {HP_KIOSK && !hpIsNight && <BackgroundOrnaments tone={hpTone} />}
 
       {/* Mobile drawer backdrop */}
       {isMobile && panel && (
@@ -2060,7 +2061,7 @@ ${transcriptLines(chunk)}`;
             background: hpIsNight ? hpUi.chromeBg : "linear-gradient(180deg, rgba(247,244,232,0.42), rgba(236,228,208,0.06))",
             backdropFilter: hpIsNight ? "blur(8px)" : "blur(2px)",
             boxShadow: hpIsNight ? "0 10px 30px rgba(0,0,0,0.24)" : "none",
-            padding: isMobile ? "5px 8px 10px" : "7px 18px 14px",
+            padding: isMobile ? "3px 8px 8px" : "7px 18px 14px",
           }}>
             <div style={{ position: "relative", zIndex: 1, maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 5 : 8 }}>
               <div style={{ width: "100%", display: "grid", gridTemplateColumns: "30px 1fr 30px", alignItems: "center", gap: 8, padding: isMobile ? "0 2px" : "0 4px" }}>
@@ -2126,7 +2127,7 @@ ${transcriptLines(chunk)}`;
                 <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minWidth: 0 }}>
                   <span style={{ color: hpUi.calendarGold, display: "flex", opacity: 0.8 }}><I.Calendar /></span>
                   <span style={{ fontFamily: V.serif, fontSize: isMobile ? 13 : 15, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeProject.currentTimeLabel || "未设定时间"}</span>
-                  {currentCanonBeat && phaseName(currentCanonBeat) && <span style={{ color: hpUi.chromeMuted, fontSize: isMobile ? 10 : 11, fontWeight: 700, whiteSpace: "nowrap" }}>{phaseName(currentCanonBeat)}</span>}
+                  {!isMobile && currentCanonBeat && phaseName(currentCanonBeat) && <span style={{ color: hpUi.chromeMuted, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{phaseName(currentCanonBeat)}</span>}
                 </span>
                 <span style={{ height: 1, background: `linear-gradient(90deg, ${hpUi.line}, transparent)` }} />
               </div>
@@ -2480,16 +2481,16 @@ ${transcriptLines(chunk)}`;
         )}
 
         {/* Input bar */}
-        <div style={{ borderTop: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.inputBar : V.inputBar, padding: isMobile ? "8px 10px calc(10px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))", position: "relative", zIndex: 1 }}>
+        <div style={{ borderTop: `1px solid ${HP_KIOSK ? hpUi.line : V.lineSoft}`, background: HP_KIOSK ? hpUi.inputBar : V.inputBar, padding: isMobile ? "6px 9px calc(8px + env(safe-area-inset-bottom))" : "12px 14px calc(14px + env(safe-area-inset-bottom))", position: "relative", zIndex: 1 }}>
           <div style={{ maxWidth: HP_KIOSK ? 650 : 900, width: "100%", margin: "0 auto" }}>
           {HP_KIOSK && activeMode === "world" && currentCalendarMoment && !input.trim() && (
             <div
               style={{
-                marginBottom: calendarOpen ? 8 : 6,
+                marginBottom: calendarOpen ? 7 : 5,
                 border: `1px solid ${hpUi.line}`,
                 borderRadius: 13,
                 background: hpUi.calendarBg,
-                padding: calendarOpen ? "9px 10px" : "7px 9px",
+                padding: calendarOpen ? "8px 9px" : "6px 8px",
                 boxShadow: hpIsNight ? "0 10px 22px rgba(0,0,0,0.12)" : "0 10px 22px rgba(89,54,32,0.10)",
               }}
             >
@@ -2587,7 +2588,7 @@ ${transcriptLines(chunk)}`;
             gap: 8,
             border: HP_KIOSK ? `1px solid ${hpUi.inputBorder}` : `1px solid ${V.lineSoft}`,
             borderRadius: HP_KIOSK ? 12 : 16,
-            padding: isMobile ? "8px 9px 8px 11px" : "9px 10px 9px 13px",
+            padding: isMobile ? "6px 8px 6px 10px" : "9px 10px 9px 13px",
             background: HP_KIOSK
               ? hpUi.inputPaper
               : V.inputField,
@@ -2595,7 +2596,7 @@ ${transcriptLines(chunk)}`;
             overflow: "hidden",
           }}>
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => handleFiles(Array.from(e.target.files))} />
-            <button onClick={() => fileRef.current?.click()} style={{ position: "relative", zIndex: 1, background: "none", border: "none", cursor: "pointer", color: HP_KIOSK ? hpUi.flourishInk : V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: 4, opacity: 0.7 }} title="上传图片/PDF">
+            <button onClick={() => fileRef.current?.click()} style={{ position: "relative", zIndex: 1, background: "none", border: "none", cursor: "pointer", color: HP_KIOSK ? hpUi.flourishInk : V.gold, padding: "3px", display: "flex", flexShrink: 0, marginBottom: isMobile ? 2 : 4, opacity: 0.7 }} title="上传图片/PDF">
               <I.Attach />
             </button>
             <textarea
@@ -2605,13 +2606,13 @@ ${transcriptLines(chunk)}`;
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
               placeholder={activeMode === "world" ? "描述你的行动 / 推进剧情…" : `和 ${activeChar.name} 说话…`}
               rows={1}
-              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: 1.35, minHeight: isMobile ? 30 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: "3px 0" }}
+              style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: isMobile ? 1.25 : 1.35, minHeight: isMobile ? 24 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: isMobile ? "2px 0" : "3px 0" }}
             />
             <button
               onClick={() => send()}
               disabled={loading || (!input.trim() && !attachments.length)}
               style={{
-                width: isMobile ? 34 : 38, height: isMobile ? 34 : 38, borderRadius: isMobile ? 14 : 16, border: `1px solid ${V.line}`,
+                width: isMobile ? 32 : 38, height: isMobile ? 32 : 38, borderRadius: isMobile ? 13 : 16, border: `1px solid ${V.line}`,
                 background: loading || (!input.trim() && !attachments.length) ? hpUi.controlBg : hpUi.seal,
                 color:      loading || (!input.trim() && !attachments.length) ? V.faint : "#f6e4ad",
                 cursor:     loading || (!input.trim() && !attachments.length) ? "not-allowed" : "pointer",

@@ -48,6 +48,39 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
         soft: "rgba(232,199,102,0.12)",
         track: "rgba(255,255,255,0.08)",
       };
+  const MARKS = {
+    stamina: "体",
+    academic: "学",
+    magic: "法",
+    courage: "勇",
+    affinity: "亲",
+    agility: "敏",
+    family: "家",
+    contribution: "贡",
+    inventory: "物",
+    courses: "课",
+    favor: "好",
+    clue: "线",
+    people: "人",
+  };
+  const mark = (label, tone = C.gold) => (
+    <span style={{
+      width: 18,
+      height: 18,
+      borderRadius: 6,
+      border: `1px solid ${C.lineStrong}`,
+      background: C.soft,
+      color: tone,
+      display: "inline-grid",
+      placeItems: "center",
+      fontSize: 10,
+      fontWeight: 800,
+      lineHeight: 1,
+      flexShrink: 0,
+    }}>
+      {label}
+    </span>
+  );
 
   const isSheet = variant === "sheet";
   const showAll = section === "all";
@@ -82,7 +115,9 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
             {[meta.house, meta.blood].filter(Boolean).join(" · ") || "霍格沃茨新生"}
           </div>
           {meta.wand?.wood && (
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>🪄 {meta.wand.wood} · {meta.wand.core}</div>
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}>
+              {mark("杖", C.goldDim)}<span>{meta.wand.wood} · {meta.wand.core}</span>
+            </div>
           )}
         </div>
         {isSheet && onClose && (
@@ -93,13 +128,13 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
       {/* 体力（消耗型资源，显眼）*/}
       {showStatus && <div style={{ padding: isSheet ? "12px 20px 4px" : "12px 16px 4px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
-          <span style={{ color: C.ink, fontWeight: 600 }}>⚡ 体力</span>
+          <span style={{ color: C.ink, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.stamina)} 体力</span>
           <span style={{ color: s.stamina <= 20 ? "#e88" : C.muted, fontWeight: 700 }}>{s.stamina} / {STAMINA_MAX}</span>
         </div>
         <div style={{ height: 8, borderRadius: 999, background: C.track, overflow: "hidden" }}>
           <div style={{ width: `${Math.max(0, Math.min(100, (s.stamina / STAMINA_MAX) * 100))}%`, height: "100%", borderRadius: 999, background: s.stamina <= 20 ? "linear-gradient(90deg,#9c3b3b,#e06b6b)" : "linear-gradient(90deg,#3a8f6e,#5fd1a5)", transition: "width 0.4s ease" }} />
         </div>
-        {s.stamina <= 20 && <div style={{ fontSize: 10.5, color: "#e8a0a0", marginTop: 5 }}>体力偏低，/休息 恢复</div>}
+        {s.stamina <= 20 && <div style={{ fontSize: 10.5, color: "#e8a0a0", marginTop: 5 }}>体力偏低，需要休息恢复</div>}
       </div>}
 
       {/* 养成数值条 */}
@@ -110,7 +145,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
           return (
             <div key={d.key}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 4 }}>
-                <span style={{ color: C.muted }}>{d.icon} {d.label}</span>
+                <span style={{ color: C.muted, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS[d.key] || d.label.slice(0, 1), C.goldDim)} {d.label}</span>
                 <span style={{ color: C.ink, fontWeight: 700 }}>{v}</span>
               </div>
               <div style={{ height: 6, borderRadius: 999, background: C.track, overflow: "hidden" }}>
@@ -123,7 +158,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
 
       {/* 学院杯 + 个人贡献 */}
       {showContribution && <div style={{ padding: isSheet ? "10px 20px 4px" : "12px 16px", borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 11.5, color: C.muted }}>🏆 个人贡献</span>
+        <span style={{ fontSize: 11.5, color: C.muted, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.contribution)} 个人贡献</span>
         <span style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>{s.housePoints ?? 0}</span>
       </div>}
       {showContribution && houseCup?.playerHouse && (
@@ -142,7 +177,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
       {/* 物品 */}
       {showInventory && <div style={{ padding: isSheet ? "10px 20px" : "10px 16px", borderTop: `1px solid ${C.line}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 5 }}>
-          <span style={{ fontSize: 11.5, color: C.muted }}>🎒 物品</span>
+          <span style={{ fontSize: 11.5, color: C.muted, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.inventory)} 物品</span>
           <span style={{ fontSize: 10.5, color: missingItems.length ? C.gold : C.muted }}>
             入学 {purchase.requiredOwnedCount}/{purchase.requiredTotal}
           </span>
@@ -169,7 +204,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
 
       {/* 课程数值 */}
       {showCourses && <div style={{ padding: isSheet ? "12px 20px" : "10px 16px", borderTop: `1px solid ${C.line}` }}>
-        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 9 }}>📚 课程</div>
+        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 9, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.courses)} 课程</div>
         <div style={{ display: isSheet ? "grid" : "block", gridTemplateColumns: isSheet ? "1fr 1fr" : undefined, gap: isSheet ? "9px 18px" : 0 }}>
           {COURSES.map((name) => {
             const v = cs[name];
@@ -193,15 +228,15 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
       {showFavor && (favorList.length > 0 || section === "favor") && (
         <div style={{ padding: isSheet ? "12px 20px" : "10px 16px", borderTop: `1px solid ${C.line}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, color: C.muted, marginBottom: favorList.length ? 10 : 8 }}>
-            <span>💛 好感度</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.favor)} 好感度</span>
             {favorList.length > 0 && <span style={{ fontSize: 10.5 }}>{favorList.length} 人</span>}
           </div>
           {favorList.length === 0 ? (
             <div style={{ padding: "14px 12px 18px", textAlign: "center", border: `1px dashed ${C.lineStrong}`, borderRadius: 12, background: C.soft }}>
-              <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.7 }}>💛</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>{mark(MARKS.favor)}</div>
               <div style={{ fontSize: 12, color: C.ink, fontWeight: 600, marginBottom: 5 }}>还没有与任何人建立关系</div>
               <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
-                在对角巷、霍格沃茨多与人物互动，<br />或在「人物」里添加原创角色，<br />好感会自动出现在这里。
+                关系簿仍是空白。<br />等某一次对话真正留下痕迹，<br />这里会出现名字。
               </div>
             </div>
           ) : favorList.map((f, i) => {
@@ -212,7 +247,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
             const recent = f.relationship?.events?.[0] || null;
             return (
               <div key={f.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-                <Avatar value={f.avatar} fallback="🧙" size={38} radius={11}
+                <Avatar value={f.avatar} fallback="人" size={38} radius={11}
                   style={{ flexShrink: 0, border: `1px solid ${C.lineStrong}`, background: C.soft, color: C.gold }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
@@ -248,7 +283,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
       {showContribution && cluesInfo.activeCount > 0 && (
         <div style={{ padding: isSheet ? "12px 20px" : "10px 16px", borderTop: `1px solid ${C.line}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 5 }}>
-            <span style={{ fontSize: 11.5, color: C.muted }}>🧩 未解线索</span>
+            <span style={{ fontSize: 11.5, color: C.muted, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.clue)} 未解线索</span>
             <span style={{ fontSize: 10.5, color: C.gold }}>{cluesInfo.activeCount}</span>
           </div>
           <div style={{ fontSize: 10.8, color: C.muted, lineHeight: 1.45 }}>
@@ -260,7 +295,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
       {/* 原创角色 */}
       {showPeople && <div style={{ padding: isSheet ? "12px 20px 20px" : "10px 16px 16px", borderTop: `1px solid ${C.line}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ocs.length ? 8 : 0 }}>
-          <span style={{ fontSize: 11.5, color: C.muted }}>✨ 原创角色</span>
+          <span style={{ fontSize: 11.5, color: C.muted, display: "inline-flex", alignItems: "center", gap: 6 }}>{mark(MARKS.people)} 原创角色</span>
           {onAddOc && (
             <button onClick={onAddOc} style={{ fontSize: 11, fontWeight: 600, color: C.ink, background: C.soft, border: `1px solid ${C.lineStrong}`, borderRadius: 999, padding: "3px 10px", cursor: "pointer", fontFamily: "inherit" }}>＋ 添加</button>
           )}

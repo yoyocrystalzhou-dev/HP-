@@ -107,7 +107,7 @@ export function CornerFlourish({ pos, color = GOLD, size = 24 }) {
 
 export function FoilTitle({ children, tone = "day", mobile = false }) {
   const isDay = tone === "day";
-  const size = mobile ? 40 : 58;
+  const size = mobile ? 34 : 58;
   const solid = isDay ? "#9a8a66" : "#d9c38b";
   const foil = "linear-gradient(180deg, #fff4ba 0%, #c7aa61 20%, #7e704f 39%, #f3dc90 53%, #9c8756 69%, #e4ca77 84%, #fff2ba 100%)";
   return (

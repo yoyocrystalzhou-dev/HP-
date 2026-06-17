@@ -330,9 +330,7 @@ export default function CharacterPanel({ characters, activeId, activeMode, playe
       </div>
 
       {profileOnly ? (
-        <div style={{ fontSize: 12, color: T.faint, lineHeight: 1.6, padding: "0 2px 12px" }}>
-          这里只编辑你的主控人设、特殊经历、隐藏设定和补充要求。其他人物卡会在后台自动参与世界叙事，不作为单独聊天入口展示。
-        </div>
+        null
       ) : (
       <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
