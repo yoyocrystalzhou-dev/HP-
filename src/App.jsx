@@ -52,7 +52,8 @@ import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExa
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
-import { AMBIGUOUS_ATMOSPHERE_STYLE } from "./lib/writingStyle.js";
+import { AMBIGUOUS_ATMOSPHERE_STYLE, HP_NARRATION_GUARD } from "./lib/writingStyle.js";
+import { stripHiddenSystemResidue } from "./lib/hiddenTags.js";
 import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, detectLifeLocation, formatLifeLogBlock } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
@@ -809,6 +810,7 @@ export default function App() {
     const liveInstructions = activePreset?.instructions || activeProject?.instructions;
     if (liveInstructions?.trim()) parts.push(liveInstructions.trim());
     parts.push(AMBIGUOUS_ATMOSPHERE_STYLE);
+    parts.push(HP_NARRATION_GUARD);
 
     const projectFileBlocks = formatProjectFiles(projectFiles);
     if (projectFileBlocks.length) parts.push(`【项目文件】\n${projectFileBlocks.join("\n\n")}`);
@@ -1196,6 +1198,7 @@ ${transcriptLines(chunk)}`;
       const sys = buildSystem(promptText);
 
       const finalText = await callAPI(config, apiMsgs, sys, (chunk) => {
+        const visibleChunk = stripHiddenSystemResidue(chunk);
         setSessions((prev) => {
           const s = prev[sid];
           if (!s) return prev;
@@ -1204,7 +1207,7 @@ ${transcriptLines(chunk)}`;
             [sid]: {
               ...s,
               updatedAt: Date.now(),
-              messages: s.messages.map((m) => m.id === aid ? { ...m, content: chunk } : m),
+              messages: s.messages.map((m) => m.id === aid ? { ...m, content: visibleChunk } : m),
             },
           };
         });
@@ -1221,7 +1224,7 @@ ${transcriptLines(chunk)}`;
       const clueParse = HP_KIOSK && activeMode === "world"
         ? parseClueTags(relationship.cleaned || daily.cleaned || finalText)
         : { cleaned: relationship.cleaned || daily.cleaned || finalText, entries: [] };
-      const visibleText = clueParse.cleaned || relationship.cleaned || daily.cleaned || finalText;
+      const visibleText = stripHiddenSystemResidue(clueParse.cleaned || relationship.cleaned || daily.cleaned || finalText);
       const dailyGrowthLine = formatDailyGrowth(daily.entries);
       let relationshipLine = "";
       let clueLine = "";
