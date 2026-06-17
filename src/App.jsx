@@ -44,8 +44,8 @@ import {
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
 import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
-import { dayPeriod, advanceCalendarClock, formatCalendarPeriodBlock, calendarMoment, buildCalendarChoiceInput } from "./lib/schoolCalendar.js";
-import { formatTimetableBlock, timetableContext } from "./lib/timetable.js";
+import { dayPeriod, advanceCalendarClock, calendarMoment, buildCalendarChoiceInput, scheduleContext, formatScheduleContextBlock } from "./lib/schoolCalendar.js";
+import { timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
 import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
@@ -219,14 +219,17 @@ export default function App() {
   const clues = activeProject?.clues || [];
   const houseCup = HP_KIOSK ? houseCupSummary(player, activeProject?.currentTimeLabel, activeProject?.houseCupResults) : null;
   const scenePeriodId = activeProject?.dayPeriod || "morning";
-  const scenePeriod = dayPeriod(scenePeriodId);
-  const currentTimetableContext = timetableContext({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId });
-  const currentCalendarMoment = HP_KIOSK && activeMode === "world"
+  const currentScheduleContext = HP_KIOSK && activeMode === "world"
+    ? scheduleContext({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
+    : null;
+  const scenePeriod = currentScheduleContext?.period || dayPeriod(scenePeriodId);
+  const currentTimetableContext = currentScheduleContext?.timetable || timetableContext({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId });
+  const currentCalendarMoment = currentScheduleContext?.moment || (HP_KIOSK && activeMode === "world"
     ? calendarMoment({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
-    : null;
-  const nextClock = HP_KIOSK && activeProject
+    : null);
+  const nextClock = currentScheduleContext?.nextClock || (HP_KIOSK && activeProject
     ? advanceCalendarClock({ currentTimeLabel: activeProject.currentTimeLabel, periodId: scenePeriodId })
-    : null;
+    : null);
   const nextPeriodButtonText = scenePeriodId === "late" ? "睡到明早" : "下一时段";
   const nextPeriodButtonTitle = nextClock
     ? `${activeProject?.currentTimeLabel || ""} · ${scenePeriod.label} → ${nextClock.currentTimeLabel || ""} · ${dayPeriod(nextClock.periodId).label}`
@@ -821,9 +824,8 @@ export default function App() {
     const csFmt = formatCurrentState(csVisible, { nameMap });
     if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
     if (HP_KIOSK && activeMode === "world") {
-      parts.push(formatCalendarPeriodBlock(scenePeriod));
-      const timetableBlock = formatTimetableBlock(currentTimetableContext);
-      if (timetableBlock) parts.push(timetableBlock);
+      const scheduleBlock = formatScheduleContextBlock(currentScheduleContext);
+      if (scheduleBlock) parts.push(scheduleBlock);
       parts.push(buildHogwartsLifeContext({
         userText,
         period: scenePeriod,

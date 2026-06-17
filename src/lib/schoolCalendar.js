@@ -1,5 +1,5 @@
 import { addDays, labelSortKey } from "./timeline.js";
-import { classChoiceFromTimetable, formatTimetableBlock, timetableContext } from "./timetable.js";
+import { classChoiceFromTimetable, formatLesson, formatTimetableBlock, isHoliday, timetableContext } from "./timetable.js";
 
 export const CLASS_DAY_RULES = [
   "标准课时：9:00-10:00 上午第1节，10:30-11:30 上午第2节；11:45-12:45 午餐；13:00-14:00 下午第1节，14:30-15:30 下午第2节；17:00-19:00 晚餐。",
@@ -64,6 +64,19 @@ export function nextCalendarEvent(currentTimeLabel) {
 export function formatCalendarPeriodBlock(period) {
   if (!period) return "";
   return `【当前生活时间段】${period.label}：${period.instruction}。这只是生活氛围与事件池参考，不代表固定剧情。`;
+}
+
+export function calendarPhase(currentTimeLabel = "") {
+  const key = labelSortKey(currentTimeLabel);
+  const month = key ? Math.floor((key % 10000) / 100) : 0;
+  if (!key) return { key, id: "unknown", label: "未识别日期", lockedToSchool: false };
+  if (key <= 19910816) return { key, id: "shopping", label: "开学前采购", lockedToSchool: false };
+  if (key >= 19910817 && key < 19910901) return { key, id: "pre_term", label: "开学前准备", lockedToSchool: false };
+  if (key === 19910901) return { key, id: "opening_day", label: "开学日", lockedToSchool: false };
+  if (HOGWARTS_CALENDAR_EVENTS[key]) return { key, id: "special_event", label: HOGWARTS_CALENDAR_EVENTS[key].title, lockedToSchool: key >= 19910901 };
+  if (key >= 19910901 && (month === 7 || month === 8)) return { key, id: "summer", label: "暑假", lockedToSchool: false };
+  if (key >= 19910901 && isHoliday(currentTimeLabel)) return { key, id: "holiday", label: "假期 / 离校阶段", lockedToSchool: false };
+  return { key, id: "school_day", label: "普通在校日", lockedToSchool: true };
 }
 
 const choice = (label, intent, opts = {}) => ({ label, intent, ...opts });
@@ -816,4 +829,84 @@ export function buildCalendarChoiceInput(choiceItem, period, currentTimeLabel) {
     choiceItem.intent,
     "请根据校历、当前时间、地点、人物关系和已有记忆自由生成发生的事；这不是固定收益选项。"
   ].filter(Boolean).join("\n");
+}
+
+export function scheduleContext({ currentTimeLabel = "", periodId = "morning" } = {}) {
+  const period = dayPeriod(periodId);
+  const phase = calendarPhase(currentTimeLabel);
+  const timetable = timetableContext({ currentTimeLabel, periodId: period.id });
+  const moment = calendarMoment({ currentTimeLabel, periodId: period.id });
+  const nextClock = advanceCalendarClock({ currentTimeLabel, periodId: period.id });
+  const nextEvent = nextCalendarEvent(currentTimeLabel);
+  const firstLesson = timetable.lessons?.[0] || null;
+  const nextPeriod = dayPeriod(nextClock.periodId);
+  const isRegularClassTime = phase.lockedToSchool && timetable.hasClass;
+  const isFreeSchoolTime = phase.lockedToSchool && !timetable.hasClass && !timetable.holiday;
+  const summaryBits = [
+    currentTimeLabel || "未设定日期",
+    period.label,
+    phase.label,
+    firstLesson ? `当前课：${firstLesson.course}` : "",
+    timetable.holiday ? "无常规课堂" : "",
+    isFreeSchoolTime ? "自由活动时段" : "",
+  ].filter(Boolean);
+  return {
+    currentTimeLabel,
+    period,
+    phase,
+    timetable,
+    moment,
+    nextClock,
+    nextEvent,
+    firstLesson,
+    isRegularClassTime,
+    isFreeSchoolTime,
+    isBeforeTerm: phase.id === "shopping" || phase.id === "pre_term",
+    isOpeningDay: phase.id === "opening_day",
+    isSpecialEvent: phase.id === "special_event",
+    nextPeriodLabel: nextPeriod.label,
+    summary: summaryBits.join(" · "),
+  };
+}
+
+export function formatScheduleContextBlock(ctx) {
+  if (!ctx) return "";
+  const openingPeriodGuide = {
+    morning: "站台、屏障、上车前的行李与人群更自然。",
+    afternoon: "霍格沃茨特快、包厢、食品推车和同届新生更自然。",
+    dinner: "抵达霍格莫德、入湖、城堡、礼堂与分院更自然。",
+    night: "公共休息室、级长带路、室友、口令和安顿更自然。",
+    late: "寝室、低声谈话、写下第一天或直接休息更自然。",
+  };
+  const periodInstruction = ctx.isBeforeTerm
+    ? "开学前/校外生活节奏；采购、备课、写信、整理行李更自然。"
+    : ctx.isOpeningDay
+      ? openingPeriodGuide[ctx.period.id] || ctx.period.instruction
+      : ctx.timetable?.holiday
+        ? "假期或留校生活节奏；通信、返校准备、节日活动和安静日常更自然。"
+        : ctx.period.instruction;
+  const lines = [
+    "【统一日程上下文】",
+    `当前：${ctx.summary}`,
+    `阶段：${ctx.phase.label}（${ctx.phase.id}）。`,
+    `时段：${ctx.period.label}；${periodInstruction}`,
+  ];
+  if (ctx.firstLesson) {
+    lines.push(`本时段课表：${ctx.timetable.lessons.map(formatLesson).join("；")}。课堂可发生互动、点名、练习或平静上课，不是固定收益。`);
+  } else if (ctx.timetable?.holiday) {
+    lines.push("本时段无常规课堂：按假期、留校、返校准备、通信或日常处理。");
+  } else if (ctx.isBeforeTerm) {
+    lines.push("当前不按校内课表运行：优先采购、备课、写信、行李、家中或对角巷生活。");
+  } else if (ctx.isOpeningDay) {
+    lines.push("开学日按时段推进：上午站台，下午列车，晚饭后抵达/分院，夜晚公共休息室与安顿。");
+  } else if (ctx.isFreeSchoolTime) {
+    lines.push("当前不是常规上课时段：可进行日常、社交、作业、社团、晚餐或地点事件。");
+  }
+  if (ctx.nextClock) {
+    lines.push(`下一时段按钮将进入：${ctx.nextClock.currentTimeLabel || ctx.currentTimeLabel} · ${ctx.nextPeriodLabel}${ctx.nextClock.dayRollover ? "（跨天）" : ""}。`);
+  }
+  if (ctx.nextEvent) {
+    lines.push(`下一个重要校历节点：${ctx.nextEvent.label} · ${ctx.nextEvent.title}。`);
+  }
+  return lines.filter(Boolean).join("\n");
 }
