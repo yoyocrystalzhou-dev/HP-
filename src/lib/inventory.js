@@ -174,6 +174,9 @@ function item(id, source, notes = "") {
   return { id, source, notes };
 }
 
+const PURCHASE_WORDS = ["买", "购买", "采购", "选购", "挑选", "买下", "付款", "结账", "配齐", "补齐", "准备好", "置办", "带走", "订购"];
+const LOOK_ONLY_WORDS = ["看看", "看一眼", "橱窗", "路过", "打量", "参观", "问问", "了解", "随便逛", "逛逛"];
+
 function isShoppingContext(text, currentTimeLabel = "") {
   const key = labelSortKey(currentTimeLabel);
   return (key && key < 19910901) || hasAny(text, [
@@ -182,37 +185,60 @@ function isShoppingContext(text, currentTimeLabel = "") {
   ]);
 }
 
+function hasPurchaseIntent(text) {
+  return hasAny(text, PURCHASE_WORDS) || /(?:取|兑换).{0,6}(钱|金币|加隆|巫师货币)/.test(text);
+}
+
+function isLookOnly(text) {
+  return hasAny(text, LOOK_ONLY_WORDS) && !hasPurchaseIntent(text);
+}
+
+function hasNegatedAcquire(text, words = []) {
+  const terms = words.map((word) => String(word || "").trim()).filter(Boolean);
+  if (!terms.length) return false;
+  const pattern = terms.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return new RegExp(`(?:不|没|没有|暂不|先不|不打算|不准备).{0,8}(?:${pattern})|(?:${pattern}).{0,8}(?:不买|没买|没有买|暂不买|先不买)`).test(text);
+}
+
+function shouldAcquire(text, aliases = [], strongPhrases = []) {
+  if (hasNegatedAcquire(text, [...aliases, ...strongPhrases])) return false;
+  if (hasAny(text, strongPhrases)) return true;
+  if (!hasAny(text, aliases)) return false;
+  if (isLookOnly(text)) return false;
+  return hasPurchaseIntent(text);
+}
+
 export function inferShoppingChanges(text, { currentTimeLabel = "", wandMeta = null } = {}) {
   const raw = compact(text);
   if (!raw || !isShoppingContext(raw, currentTimeLabel)) return [];
   const changes = [];
 
-  if (hasAny(raw, ["古灵阁", "兑换", "取钱", "金币", "加隆", "巫师货币"])) {
+  if (hasAny(raw, ["兑换", "取钱", "取金币", "换加隆"]) || shouldAcquire(raw, ["巫师货币", "金币", "加隆"], ["兑换巫师货币", "准备巫师货币", "取出加隆"])) {
     changes.push(item("wizard_money", "古灵阁", "已准备采购用的巫师货币。"));
   }
-  if (hasAny(raw, ["奥利凡德", "挑选魔杖", "买魔杖", "魔杖选择"])) {
+  if (shouldAcquire(raw, ["奥利凡德", "魔杖"], ["挑选魔杖", "买魔杖", "魔杖选择", "让魔杖选择"])) {
     const notes = wandMeta?.wood && wandMeta?.core ? `${wandMeta.wood} · ${wandMeta.core}` : "";
     changes.push(item("wand", "奥利凡德魔杖店", notes));
   }
-  if (hasAny(raw, ["摩金夫人", "买校袍", "量校袍", "长袍店", "校袍"])) {
+  if (shouldAcquire(raw, ["摩金夫人", "长袍店", "校袍"], ["买校袍", "量校袍"])) {
     changes.push(item("school_robes", "摩金夫人长袍店"));
   }
-  if (hasAny(raw, ["丽痕书店", "买课本", "课本", "教材", "书店"])) {
+  if (shouldAcquire(raw, ["丽痕书店", "课本", "教材", "书店"], ["买课本", "买教材", "买课本材料"])) {
     changes.push(item("school_books", "丽痕书店"));
   }
-  if (hasAny(raw, ["魔药材料店", "坩埚", "药材", "魔药材料", "买课本材料", "买材料"])) {
+  if (shouldAcquire(raw, ["魔药材料店", "坩埚", "药材", "魔药材料"], ["买课本材料", "买材料", "买坩埚", "买魔药材料"])) {
     changes.push(item("cauldron", "对角巷采购"));
     changes.push(item("potion_kit", "对角巷采购"));
     changes.push(item("scales_phials", "对角巷采购"));
   }
-  if (hasAny(raw, ["望远镜", "天文用品"])) changes.push(item("telescope", "对角巷采购"));
-  if (hasAny(raw, ["羽毛笔", "羊皮纸", "墨水", "文具"])) changes.push(item("quill_parchment", "对角巷采购"));
-  if (hasAny(raw, ["行李箱", "箱子", "收拾行李"])) changes.push(item("trunk", "对角巷采购"));
-  if (hasAny(raw, ["猫头鹰"])) changes.push(item("owl", "宠物店"));
-  else if (hasAny(raw, ["蟾蜍"])) changes.push(item("toad", "宠物店"));
-  else if (hasAny(raw, ["买猫", "猫咪", "宠物猫"])) changes.push(item("cat", "宠物店"));
-  if (hasAny(raw, ["魁地奇精品店", "飞天扫帚", "买扫帚", "扫帚"])) changes.push(item("broom", "魁地奇精品店"));
-  if (hasAny(raw, ["糖果", "巧克力蛙", "比比多味豆", "蜂蜜公爵"])) changes.push(item("sweets", "对角巷/糖果店"));
+  if (shouldAcquire(raw, ["望远镜", "天文用品"], ["买望远镜"])) changes.push(item("telescope", "对角巷采购"));
+  if (shouldAcquire(raw, ["羽毛笔", "羊皮纸", "墨水", "文具"], ["买文具", "买羽毛笔", "买羊皮纸"])) changes.push(item("quill_parchment", "对角巷采购"));
+  if (shouldAcquire(raw, ["行李箱", "箱子"], ["买行李箱", "收拾行李"])) changes.push(item("trunk", "对角巷采购"));
+  if (shouldAcquire(raw, ["猫头鹰"], ["买猫头鹰", "买一只猫头鹰", "挑一只猫头鹰", "带走猫头鹰"])) changes.push(item("owl", "宠物店"));
+  else if (shouldAcquire(raw, ["蟾蜍"], ["买蟾蜍", "买一只蟾蜍"])) changes.push(item("toad", "宠物店"));
+  else if (shouldAcquire(raw, ["猫咪", "宠物猫"], ["买猫", "买一只猫", "挑一只猫"])) changes.push(item("cat", "宠物店"));
+  if (shouldAcquire(raw, ["魁地奇精品店", "飞天扫帚", "扫帚"], ["买扫帚", "买飞天扫帚", "买下一把飞天扫帚"])) changes.push(item("broom", "魁地奇精品店"));
+  if (shouldAcquire(raw, ["糖果", "巧克力蛙", "比比多味豆", "蜂蜜公爵"], ["买糖果", "买巧克力蛙", "买比比多味豆"])) changes.push(item("sweets", "对角巷/糖果店"));
 
   const seen = new Set();
   return changes.filter((change) => {

@@ -63,5 +63,40 @@ const ok = (cond, msg) => {
   ok(noShop.length === 0, "non-shopping school usage does not invent purchases");
 }
 
+{
+  const lookOnly = inferShoppingChanges("我去咿啦猫头鹰商店看看橱窗里的雪枭。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(!lookOnly.some((entry) => entry.id === "owl"), "looking at owls in a shop does not acquire a pet");
+  const bought = inferShoppingChanges("我挑一只猫头鹰并付款带走。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(bought.some((entry) => entry.id === "owl"), "explicitly buying an owl acquires the pet");
+}
+
+{
+  const windowShopping = inferShoppingChanges("我路过魁地奇精品店，看着橱窗里的飞天扫帚。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(!windowShopping.some((entry) => entry.id === "broom"), "window-shopping brooms does not acquire a broom");
+  const bought = inferShoppingChanges("我买下一把飞天扫帚。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(bought.some((entry) => entry.id === "broom"), "explicit broom purchase is still tracked");
+}
+
+{
+  const browseBooks = inferShoppingChanges("我去丽痕书店看看一年级课本。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(!browseBooks.some((entry) => entry.id === "school_books"), "browsing books does not complete textbook purchase");
+  const buyBooks = inferShoppingChanges("我在丽痕书店买课本和教材。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(buyBooks.some((entry) => entry.id === "school_books"), "explicit textbook purchase completes textbook item");
+}
+
+{
+  const rateOnly = inferShoppingChanges("我在古灵阁柜台前看看巫师货币汇率。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(!rateOnly.some((entry) => entry.id === "wizard_money"), "looking at wizard-money exchange rates does not acquire money");
+  const exchanged = inferShoppingChanges("我在古灵阁兑换巫师货币。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(exchanged.some((entry) => entry.id === "wizard_money"), "explicitly exchanging wizard money records spending funds");
+}
+
+{
+  const noOwl = inferShoppingChanges("我没有买猫头鹰，只是在店里看了看。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(!noOwl.some((entry) => entry.id === "owl"), "negated owl purchase does not acquire a pet");
+  const noBroom = inferShoppingChanges("我暂时不买扫帚，只记下价格。", { currentTimeLabel: "1991年8月16日 · 对角巷采购" });
+  ok(!noBroom.some((entry) => entry.id === "broom"), "negated broom purchase does not acquire a broom");
+}
+
 console.log(`\nInventory checklist tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
