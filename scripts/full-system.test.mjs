@@ -138,6 +138,7 @@ const player = createPlayerCharacter({
   const cast = [
     { id: "harry", name: "哈利·波特" },
     { id: "ron", name: "罗恩·韦斯莱" },
+    { id: "draco", name: "德拉科·马尔福" },
     { id: "bellatrix", name: "贝拉特里克斯·莱斯特兰奇" },
     { id: "albus", name: "阿不思·珀西瓦尔·伍尔弗里克·布赖恩·邓布利多" },
     { id: "hagrid", name: "鲁伯·海格" },
@@ -176,6 +177,19 @@ const player = createPlayerCharacter({
   const familyTag = parseRelationshipDeltas("拉环说那是莱斯特兰奇家的金库守卫龙。\n【关系变化：贝拉特里克斯·莱斯特兰奇+1】", cast, [oc]);
   const familyFiltered = filterRelationshipDeltasByEvidence(familyTag.entries, "我跟着拉环离开金库。", cast, [oc], { aiText: "拉环说那是莱斯特兰奇家的金库守卫龙。" });
   ok(familyFiltered.length === 0, "family surname relationship tag is rejected without direct character evidence");
+
+  const dracoDotless = inferFavorDeltas("我跟德拉科马尔福说：谢谢。", cast, [oc], {
+    aiText: "德拉科马尔福把羽毛笔递给你。",
+    maxEntries: 4,
+  });
+  ok(dracoDotless.some((x) => x.id === "draco"), "dotless Draco name is recognized as direct interaction");
+
+  const dracoContinued = inferFavorDeltas("我低声回答：那就一起走吧。", cast, [oc], {
+    aiText: "他没有立刻退开，只把书包换到另一只手里。",
+    continuityCharacterIds: ["draco"],
+    maxEntries: 4,
+  });
+  ok(dracoContinued.length === 1 && dracoContinued[0].id === "draco", "one-on-one Draco continuity can grow favor without repeating the name");
 
   const gringottsScene = "海格给哈利让路。哈利·波特仰头看着古灵阁大厅。伊芙琳只是擦肩而过，听见海格对妖精说：邓布利多教授让我来取713号金库里的东西。";
   const gringottsTags = parseRelationshipDeltas(`${gringottsScene}\n【关系变化：哈利+1；鲁伯·海格+1；阿不思·珀西瓦尔·伍尔弗里克·布赖恩·邓布利多+1】`, cast, [oc]);

@@ -30,7 +30,13 @@ function cleanText(text, max = 120) {
 function aliasesFor(name) {
   const normalized = String(name || "").replace(/·/g, "・");
   const parts = normalized.split(/[・]/).filter(Boolean);
-  return [...new Set([normalized, parts[0], parts.at(-1)].filter((x) => x && x.length >= 2))];
+  return [...new Set([
+    normalized,
+    normalized.replace(/・/g, "·"),
+    parts.join(""),
+    parts[0],
+    parts.at(-1),
+  ].filter((x) => x && x.length >= 2))];
 }
 
 function characterPool(characters = [], ocs = []) {

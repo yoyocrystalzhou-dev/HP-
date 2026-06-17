@@ -94,6 +94,25 @@ function formatRel(rel) {
   return bits.join("；");
 }
 
+function recentInteractionCharacterIds(lifeLog = [], limit = 3) {
+  for (const entry of Array.isArray(lifeLog) ? lifeLog : []) {
+    const ids = [
+      ...(entry?.relationshipDeltas || []).map((delta) => delta?.id),
+      ...(entry?.interactionCharacterIds || []),
+    ].filter(Boolean);
+    if (!ids.length) continue;
+    const out = [];
+    const seen = new Set();
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out.slice(0, limit);
+  }
+  return [];
+}
+
 /** Look up a relationship toward `entity`, by id first then by name (free-text). */
 function findRel(relationships, entity) {
   if (!relationships || !entity) return null;
@@ -1236,7 +1255,11 @@ ${transcriptLines(chunk)}`;
       const presentCharacterIds = HP_KIOSK && activeMode === "world"
         ? detectCharacterRefs(`${lastUserForMechanics.display || ""}\n${visibleText}`, projectChars, activeProject?.ocs || [], { mode: "present" }).map((entry) => entry.id)
         : [];
-      const presentCharacterSet = new Set(presentCharacterIds);
+      const continuityCharacterIds = HP_KIOSK && activeMode === "world"
+        ? recentInteractionCharacterIds(activeProject?.lifeLog, 3)
+        : [];
+      const relationshipPresenceIds = [...new Set([...presentCharacterIds, ...continuityCharacterIds])];
+      const presentCharacterSet = new Set(relationshipPresenceIds);
 
       if (daily.entries.length) {
         patchProject((p) => {
@@ -1249,7 +1272,7 @@ ${transcriptLines(chunk)}`;
         lastUserForMechanics.display || "",
         projectChars,
         activeProject?.ocs || [],
-        { aiText: visibleText, playerName: player.name, presentCharacterIds }
+        { aiText: visibleText, playerName: player.name, presentCharacterIds: relationshipPresenceIds, continuityCharacterIds }
       );
       if (allowRelationshipDeltas) {
         // 兜底/补全：从玩家这轮可见输入里识别直接互动到的角色，对 AI 没有给出变化的角色
@@ -1258,6 +1281,7 @@ ${transcriptLines(chunk)}`;
           aiText: visibleText,
           playerName: player.name,
           maxEntries: 4,
+          continuityCharacterIds,
         });
         if (inferred.length) {
           const have = new Set(relEntries.map((e) => e.id));

@@ -146,6 +146,18 @@ const allows = [
     ai: "艾米丽轻轻点头，对你笑了笑。",
     expect: ["oc-emily"],
   },
+  {
+    name: "无分隔符全名直接互动",
+    user: "我跟德拉科马尔福说：这本书是你的吗？",
+    ai: "德拉科马尔福停住脚步，把书脊转向你：是我的。",
+    expect: ["draco"],
+  },
+  {
+    name: "姓氏称呼直接互动",
+    user: "我对马尔福道谢，接过他递来的羽毛笔。",
+    ai: "德拉科·马尔福的手指从笔杆上收回，语气仍然有点硬：别弄丢。",
+    expect: ["draco"],
+  },
 ];
 
 for (const item of allows) {
@@ -157,6 +169,33 @@ for (const item of allows) {
   for (const id of item.expect) {
     ok(inferred.some((x) => x.id === id), `${item.name}: allows ${id}`);
   }
+}
+
+{
+  const inferred = inferFavorDeltas("我低声回答：谢谢。", cast, ocs, {
+    aiText: "他把羽毛笔又往你这边推近了一点：拿着吧。",
+    playerName: "伊芙琳·塞尔温",
+    continuityCharacterIds: ["draco"],
+  });
+  ok(inferred.length === 1 && inferred[0].id === "draco", "continuing a one-on-one Draco exchange can infer favor without repeating his name");
+}
+
+{
+  const inferred = inferFavorDeltas("继续逛逛", cast, ocs, {
+    aiText: "货架之间的魔法灯晃了一下。",
+    playerName: "伊芙琳·塞尔温",
+    continuityCharacterIds: ["draco"],
+  });
+  ok(!inferred.some((x) => x.id === "draco"), "calendar/continue actions do not award favor from prior Draco focus");
+}
+
+{
+  const inferred = inferFavorDeltas("我向哈利打招呼。", cast, ocs, {
+    aiText: "哈利·波特抬起头，对你点点头。",
+    playerName: "伊芙琳·塞尔温",
+    continuityCharacterIds: ["draco"],
+  });
+  ok(inferred.some((x) => x.id === "harry") && !inferred.some((x) => x.id === "draco"), "explicitly switching target does not keep awarding prior Draco focus");
 }
 
 console.log(`\nAffinity regression tests: ${pass} passed, ${fail} failed`);

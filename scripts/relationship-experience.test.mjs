@@ -28,6 +28,7 @@ const player = {
 
 const cast = [
   { id: "harry", name: "哈利・詹姆斯・波特", kind: "canon" },
+  { id: "draco", name: "德拉科・马尔福", kind: "canon" },
   { id: "albus", name: "阿不思・珀西瓦尔・伍尔弗里克・布赖恩・邓布利多", kind: "canon" },
 ];
 
@@ -111,6 +112,13 @@ const cast = [
 {
   const parsed = parseRelationshipDeltas("【关系变化：阿不思・珀西瓦尔・伍尔弗里克・布赖恩・邓布利多+1】", cast, []);
   ok(parsed.entries.length === 1 && parsed.entries[0].id === "albus", "long canonical full names parse in relationship tags");
+}
+
+{
+  ok(findCharacter("德拉科马尔福", cast, [])?.id === "draco", "dotless Draco full name resolves");
+  ok(findCharacter("马尔福", cast, [])?.id === "draco", "Draco surname resolves when used as a social target");
+  const parsed = parseRelationshipDeltas("【关系变化：德拉科马尔福+1；马尔福+1】", cast, []);
+  ok(parsed.entries.length === 1 && parsed.entries[0].id === "draco" && parsed.entries[0].delta === 2, "dotless and surname Draco tags parse and merge");
 }
 
 {

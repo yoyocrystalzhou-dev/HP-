@@ -154,5 +154,17 @@ const player = { name: "伊芙琳・塞尔温", meta: { house: "斯莱特林" },
   ok(filtered.length === 1 && filtered[0].id === "draco", "direct exchange can pass presence and interaction filters");
 }
 
+{
+  const ai = "德拉科马尔福把落在地上的羽毛笔递给你，指尖在笔杆上停了一下。";
+  const present = detectCharacterRefs(ai, cast, [], { mode: "present" }).map((x) => x.id);
+  const parsed = parseRelationshipDeltas(`${ai}\n【关系变化：马尔福+1】`, cast, []);
+  const filtered = filterRelationshipDeltasByEvidence(parsed.entries, "我对马尔福道谢，接过羽毛笔。", cast, [], {
+    aiText: ai,
+    playerName: "伊芙琳・塞尔温",
+    presentCharacterIds: present,
+  });
+  ok(present.includes("draco") && filtered.length === 1 && filtered[0].id === "draco", "dotless Draco and surname interaction pass presence and evidence filters");
+}
+
 console.log(`\nPresence system tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

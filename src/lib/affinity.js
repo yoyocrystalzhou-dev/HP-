@@ -44,18 +44,40 @@ export function relationshipGate(value, relationship = null) {
   return { stage, next: "朋友", progress: n, canConfess: false, line: `距离朋友还差 ${21 - n}；当前更适合初识、试探、礼貌或轻微摩擦。` };
 }
 
+function normalizeNameText(value) {
+  return String(value || "").replace(/[·・\s]/g, "").trim();
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function aliasesFor(name) {
+  const raw = String(name || "").trim();
+  const dot = raw.replace(/·/g, "・");
+  const middleDot = raw.replace(/・/g, "·");
+  const parts = dot.split(/[・]/).filter(Boolean);
+  const joined = parts.join("");
+  return [...new Set([raw, dot, middleDot, joined, parts[0], parts.at(-1)].filter((x) => x && x.length >= 2))];
+}
+
 /** 在 canon 角色 + OC 里按名字宽松匹配。返回 { id, name, kind } 或 null。 */
 export function findCharacter(name, characters = [], ocs = []) {
   const q = String(name || "").trim();
   if (!q) return null;
+  const nq = normalizeNameText(q);
   const all = [
     ...(characters || []).map((c) => ({ ...c, kind: "canon" })),
     ...(ocs || []).map((o) => ({ ...o, kind: "oc", romanceable: o.romanceable !== false })),
   ];
   return (
     all.find((c) => c.name === q) ||
+    all.find((c) => normalizeNameText(c.name) === nq) ||
     all.find((c) => c.name.includes(q) || q.includes(c.name)) ||
-    all.find((c) => c.name.split(/[·・]/)[0] === q) ||
+    all.find((c) => {
+      const cn = normalizeNameText(c.name);
+      return cn.includes(nq) || nq.includes(cn) || aliasesFor(c.name).some((alias) => normalizeNameText(alias) === nq);
+    }) ||
     null
   );
 }
@@ -246,17 +268,14 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     "递给", "接过", "帮", "帮助", "安慰", "感谢", "道歉", "解释", "劝", "提醒", "看向",
     "笑", "点头", "摇头", "握手", "并肩", "保护", "挡住", "争执", "对峙", "找", "走向", "靠近",
   ];
-  const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const aliasesFor = (name) => {
-    const parts = String(name || "").split(/[·・]/).filter(Boolean);
-    return [...new Set([name, parts[0]].filter((x) => x && x.length >= 2))];
-  };
   const hasAlias = (source, aliases) => aliases.some((alias) => source.includes(alias));
   const hasDialogue = (source, aliases) => aliases.some((alias) => new RegExp(`${escapeRegExp(alias)}[：:]`).test(source));
   const playerAliases = [...new Set(["你", "玩家", playerName, ...String(playerName || "").split(/[·・]/)].filter((x) => x && x.length >= 1))];
-  const playerSocialIntent = /(?:说|问|回答|回应|聊天|交谈|打招呼|介绍|邀请|同行|一起|坐下|递给|接过|给|送|分享|帮|帮助|安慰|感谢|道歉|解释|劝|提醒|握手|并肩|保护|挡住|争执|对峙|找|走向|靠近|请求|拜托|说服)/.test(compactPlayer);
+  const playerSocialIntent = /(?:说|问|回答|回应|聊天|交谈|打招呼|介绍|邀请|同行|一起|坐下|递给|递过|接过|收下|给|送|分享|帮|帮助|安慰|感谢|道谢|道歉|解释|劝|提醒|握手|并肩|保护|挡住|争执|对峙|找|走向|靠近|请求|拜托|说服|点头|摇头|笑|开口|低声|轻声|沉默|答应|拒绝|看着他|看着她|看向他|看向她|望向他|望向她)/.test(compactPlayer);
   const groupSocialIntent = groupIntent && playerSocialIntent;
   const openSocialIntent = playerSocialIntent && !/(?:远远|只是|只|看看|看见|观察|留意|注意|听见|听到|路过|擦肩|没有过去|不靠近|不打扰|不说话|不互动)/.test(compactPlayer);
+  const explicitCharacterRefs = new Set();
+  const continuityIds = new Set(Array.isArray(opts.continuityCharacterIds) ? opts.continuityCharacterIds.filter(Boolean) : []);
   const isReferenceOnly = (source, aliases) => aliases.some((alias) => {
     const name = escapeRegExp(alias);
     return new RegExp(
@@ -304,6 +323,7 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     const mentionedByPlayer = hasAlias(compactPlayer, aliases);
     const mentionedByAi = hasAlias(compactAi, aliases);
     if (!mentionedByPlayer && !mentionedByAi) continue;
+    if (mentionedByPlayer) explicitCharacterRefs.add(c.id);
     const speaks = hasDialogue(aiText, aliases);
     const playerInteracted = hasPlayerInteractionNear(compactPlayer, aliases);
     const aiInteracted = hasAiDirectToPlayer(compactAi, aliases);
@@ -320,6 +340,17 @@ export function inferFavorDeltas(userText, characters = [], ocs = [], opts = {})
     if (directEvidence && score >= 3) scored.push({ ...c, score });
   }
 
+  if (!scored.length && openSocialIntent && explicitCharacterRefs.size === 0 && continuityIds.size === 1) {
+    const id = [...continuityIds][0];
+    const target = all.find((c) => c.id === id);
+    if (target) {
+      const aliases = aliasesFor(target.name);
+      if (!absentInAi(aliases) && !isReferenceOnly(compactPlayer, aliases)) {
+        scored.push({ ...target, score: 3 });
+      }
+    }
+  }
+
   return scored
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "zh-Hans-CN"))
     .slice(0, maxEntries)
@@ -334,6 +365,7 @@ export function filterRelationshipDeltasByEvidence(entries = [], userText, chara
     aiText: opts.aiText || "",
     playerName: opts.playerName || "",
     maxEntries: 6,
+    continuityCharacterIds: opts.continuityCharacterIds || [],
   });
   const allowed = new Set(evidence.map((entry) => entry.id));
   return mergeRelationshipEntries(entries).filter((entry) => allowed.has(entry.id) && (!hasPresenceLock || present.has(entry.id)));
