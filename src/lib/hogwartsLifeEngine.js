@@ -20,6 +20,56 @@ const loc = (id, label, zone, tags, opts = {}) => ({
 });
 
 export const HOGWARTS_LOCATIONS = [
+  loc("diagon_alley", "对角巷", "校外购物区", ["采购", "巫师街道", "开学前"], {
+    aliases: ["对角巷", "破釜酒吧后院", "巫师街"],
+    periods: ["morning", "afternoon", "dinner"],
+    likelyPeople: ["新生家庭", "店主", "高年级学生", "原著人物边缘擦肩"],
+    eventFamilies: ["public_encounter", "lost_object", "rumor", "canon_echo", "weather"],
+  }),
+  loc("gringotts", "古灵阁", "校外金融区", ["金库", "妖精", "开学前"], {
+    aliases: ["古灵阁", "巫师银行", "金库", "矿车"],
+    periods: ["morning", "afternoon"],
+    risk: "medium",
+    likelyPeople: ["妖精", "采购家庭", "海格", "哈利"],
+    eventFamilies: ["public_encounter", "secret_clue", "canon_echo", "lost_object", "rule_risk"],
+  }),
+  loc("ollivanders", "奥利凡德魔杖店", "校外购物区", ["魔杖", "选择", "开学前"], {
+    aliases: ["奥利凡德", "魔杖店", "挑选魔杖", "买魔杖"],
+    periods: ["morning", "afternoon"],
+    likelyPeople: ["奥利凡德", "新生", "家长"],
+    eventFamilies: ["canon_echo", "magical_mishap", "public_encounter", "quiet_moment"],
+  }),
+  loc("flourish_blotts", "丽痕书店", "校外购物区", ["课本", "书店", "资料"], {
+    aliases: ["丽痕书店", "书店", "课本", "买课本"],
+    periods: ["morning", "afternoon"],
+    likelyPeople: ["店员", "采购学生", "赫敏"],
+    eventFamilies: ["research_clue", "study_help", "lost_object", "public_encounter"],
+  }),
+  loc("madam_malkins", "摩金夫人长袍店", "校外购物区", ["校袍", "试衣", "新生"], {
+    aliases: ["摩金夫人", "长袍店", "校袍店", "买校袍"],
+    periods: ["morning", "afternoon"],
+    likelyPeople: ["摩金夫人", "新生", "德拉科"],
+    eventFamilies: ["public_encounter", "misunderstanding", "rivalry", "friendship"],
+  }),
+  loc("potion_supply_shop", "魔药材料店", "校外购物区", ["魔药材料", "坩埚", "开学前"], {
+    aliases: ["魔药材料店", "药材店", "坩埚店", "买坩埚", "买课本材料"],
+    periods: ["morning", "afternoon"],
+    likelyPeople: ["店主", "采购学生", "斯莱特林家庭"],
+    eventFamilies: ["magical_mishap", "lost_object", "public_encounter", "rumor"],
+  }),
+  loc("kings_cross", "国王十字车站", "校外交通", ["站台", "麻瓜", "开学"], {
+    aliases: ["国王十字", "九又四分之三", "站台", "车站"],
+    periods: ["morning", "afternoon"],
+    risk: "medium",
+    likelyPeople: ["新生家庭", "韦斯莱一家", "巡查人员"],
+    eventFamilies: ["lost", "public_encounter", "help_request", "canon_echo"],
+  }),
+  loc("hogwarts_express", "霍格沃茨特快", "校外交通", ["列车", "包厢", "开学"], {
+    aliases: ["霍格沃茨特快", "列车", "包厢", "车厢", "特快列车"],
+    periods: ["morning", "afternoon", "dinner"],
+    likelyPeople: ["新生", "售货女巫", "哈利三人组", "德拉科一行"],
+    eventFamilies: ["public_encounter", "friendship", "rivalry", "rumor", "canon_echo", "lost_object"],
+  }),
   loc("great_hall", "礼堂", "城堡公共区", ["用餐", "公告", "学院氛围"], {
     aliases: ["大厅", "大礼堂", "晚宴", "早餐", "午餐", "晚餐"],
     periods: ["morning", "afternoon", "dinner", "night"],
@@ -263,6 +313,7 @@ export const HOGWARTS_LOCATIONS = [
 
 export const LIFE_EVENT_FAMILIES = [
   ["quiet_moment", "安静日常：休息、观察、写信、整理物品、发呆；可以没有收益，但应留下生活质感。"],
+  ["quiet_study", "安静学习：读书、查资料、写作业、旁人低声经过；不等于固定加学术。"],
   ["public_encounter", "公共偶遇：某人自然出现，反应受时间、学院、好感度、上次互动影响。"],
   ["friendship", "关系推进：一起完成小事、互相试探、误会修复、共同秘密；不得直接越过好感门槛。"],
   ["rivalry", "竞争/摩擦：学院立场、课堂表现、魁地奇、流言引发轻微冲突。"],
@@ -291,6 +342,58 @@ export const LIFE_EVENT_FAMILIES = [
 ];
 
 const FAMILY_MAP = new Map(LIFE_EVENT_FAMILIES);
+
+const FAMILY_INTENT_WEIGHTS = {
+  daily: ["quiet_moment", "friendship", "weather", "letter", "lost_object"],
+  social: ["public_encounter", "friendship", "misunderstanding", "rivalry", "help_request"],
+  investigation: ["secret_clue", "research_clue", "rumor", "portrait_gossip", "canon_echo"],
+  risk: ["rule_risk", "secret_clue", "consequence", "magical_mishap", "canon_echo"],
+  class: ["class_challenge", "practice", "professor_attention", "house_pressure", "magical_mishap"],
+};
+
+const FAMILY_VARIANTS = {
+  quiet_moment: ["物品细节牵出情绪", "天气改变停留方式", "有人短暂停在近处又离开", "一封信或一句话留下余味"],
+  quiet_study: ["书页边缘留下旧批注", "安静被一次低声经过打断", "查阅过程带出新的疑问", "资料没有立刻给出答案"],
+  public_encounter: ["擦肩时注意到一个细节", "拥挤迫使短暂并行", "旁人议论改变气氛", "对方反应受上次关系影响"],
+  friendship: ["一起完成很小的事", "误会被轻轻碰到但未完全说开", "递东西时产生短暂停顿", "共同保守一个无伤大雅的小秘密"],
+  rivalry: ["学院立场造成轻微摩擦", "课堂或球场表现被比较", "一句话引发克制的对峙", "流言让双方都没有退开"],
+  rumor: ["半真半假的礼堂传闻", "只听见一句被截断的话", "级长或高年级人群传出的消息", "传闻和原著锚点只轻微擦边"],
+  portrait_gossip: ["画像说出偏颇线索", "幽灵纠正一个细节", "画像记得上次路过", "古怪评价制造误会"],
+  lost: ["移动楼梯改变路线", "画像门不肯立刻打开", "走廊比记忆里多出岔路", "迷路导致错过或撞见某人"],
+  lost_object: ["误拿了别人的东西", "归还物品制造短暂接触", "遗失物带着可追踪标记", "小物件回收上次事件"],
+  homework: ["作业拖延引发求助", "批注里夹着奇怪线索", "有人指出一个错误", "同桌沉默地挪近一点"],
+  study_help: ["有人需要解释题目", "合作查找但结论不完整", "平斯夫人打断过近的声音", "资料让关系轻微变化"],
+  research_clue: ["借阅记录缺了一页", "旧报纸只给出边缘信息", "脚注指向另一本书", "书页里夹着不属于这里的纸片"],
+  class_challenge: ["被教授点名", "练习时出现小偏差", "同学反应影响压力", "课堂表现留下后续印象"],
+  practice: ["动作手感有细微进步", "失败造成轻微尴尬", "旁人给出一句建议", "训练受地点和体力限制"],
+  magical_mishap: ["咒语偏了一点", "魔药气味不对", "物品轻微失控", "事故造成可回收的小后果"],
+  creature_plant: ["动物对某人反应异常", "植物留下痕迹", "远处传来动静", "照料行为带出关系变化"],
+  rule_risk: ["巡逻声靠近又错开", "级长提醒但没有立刻惩罚", "费尔奇的影子制造压力", "风险留下后续被追问的可能"],
+  professor_attention: ["教授留意到细节", "一句提醒带着倾向", "加扣分必须有明确理由", "课后被短暂叫住"],
+  house_pressure: ["学院分牵动气氛", "同院期待造成压力", "别院目光制造比较", "胜负欲被轻轻点燃"],
+  help_request: ["同学提出小请求", "幽灵或小精灵需要帮忙", "帮忙对象影响后续关系", "请求看似普通但有余波"],
+  secret_clue: ["异常声音只出现一次", "脚印或痕迹没有完整解释", "纸条内容被遮住一半", "线索必须与原著锚点保持边缘相关"],
+  canon_echo: ["原著事件以背景方式擦过", "只看见大事件的边缘人物", "听见与原著有关但不完整的消息", "不得凭空制造大型世界观谜团"],
+  weather: ["雨声困住行动", "黄昏改变人物距离", "冷风让人靠近或沉默", "天气影响路线和情绪"],
+  letter: ["猫头鹰带来家信", "无人来信形成情绪空白", "包裹改变日程", "信件内容只推进私人线索"],
+  care: ["疲惫或小伤需要照顾", "探病带出关系温度", "庞弗雷夫人打断冒险", "恢复造成日程压力"],
+  consequence: ["上次选择被别人提起", "流言开始变形", "惩罚或奖励落到生活里", "未完成的小事回来找人"],
+  misunderstanding: ["只听到半句话", "对方误读了玩家动作", "玩家被错认或错怪", "误会可澄清也可暂时留下"],
+};
+
+const FAMILY_KEYWORDS = {
+  secret_clue: ["线索", "异常", "脚印", "纸条", "秘密", "713", "禁区", "藏"],
+  research_clue: ["资料", "借阅", "书页", "脚注", "报纸", "图书馆"],
+  friendship: ["一起", "帮", "安慰", "道谢", "并肩", "坐下"],
+  rivalry: ["争执", "挑衅", "斯莱特林", "格兰芬多", "比赛", "对峙"],
+  rule_risk: ["费尔奇", "巡逻", "宵禁", "禁书区", "禁林", "被抓", "扣分"],
+  class_challenge: ["课堂", "教授", "点名", "上课", "回答", "练习"],
+  practice: ["练习", "扫帚", "挥杖", "训练", "魔咒", "飞行"],
+  rumor: ["传闻", "听说", "议论", "消息", "礼堂"],
+  letter: ["信", "猫头鹰", "包裹", "家里"],
+  quiet_study: ["图书馆", "读书", "查资料", "作业", "书页"],
+  consequence: ["上次", "昨天", "后来", "还记得", "再次"],
+};
 
 export const LIFE_SCENE_ENGINE_RULES =
   "【霍格沃茨生活场景引擎】\n" +
@@ -412,6 +515,190 @@ function recentContinuityLines(currentState, storyMemory, worldMemory) {
   return [...stateBits, ...storyBits, ...worldBits].slice(-8);
 }
 
+function stableHash(text) {
+  let hash = 2166136261;
+  for (const ch of String(text || "")) {
+    hash ^= ch.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0);
+}
+
+function familyLabel(id) {
+  return (FAMILY_MAP.get(id) || id).split("：")[0];
+}
+
+function inferIntentBuckets(text) {
+  const compact = String(text || "").replace(/\s+/g, "");
+  const buckets = new Set();
+  if (hasAny(compact, ["闲逛", "逛逛", "散步", "坐下", "发呆", "吃饭", "回休息室", "回宿舍", "休息", "随便看看", "普通", "照常"])) buckets.add("daily");
+  if (captureMeetTarget(compact) || hasAny(compact, ["聊天", "说话", "一起", "同行", "帮", "安慰", "道谢", "道歉", "找", "靠近", "叫住"])) buckets.add("social");
+  if (hasAny(compact, ["查", "调查", "线索", "秘密", "异常", "纸条", "脚印", "偷听", "听见", "传闻", "翻找", "借阅", "713"])) buckets.add("investigation");
+  if (!hasNegatedRisk(compact) && hasAny(compact, ["夜游", "宵禁", "禁区", "禁书区", "禁林", "偷偷", "潜入", "躲开", "费尔奇", "不被发现"])) buckets.add("risk");
+  if (hasAny(compact, ["上课", "课堂", "作业", "练习", "魔咒", "魔药", "变形术", "飞行", "扫帚", "回答", "教授"])) buckets.add("class");
+  return buckets;
+}
+
+function recentLifeLines(lifeLog = [], limit = 8) {
+  return (Array.isArray(lifeLog) ? lifeLog : [])
+    .slice(0, limit)
+    .map((entry) => [
+      entry.location,
+      entry.scene,
+      entry.userText,
+      entry.assistantText,
+      ...(entry.clues || []).map((x) => x.title),
+      entry.rollLine,
+    ].filter(Boolean).join(" "))
+    .filter(Boolean);
+}
+
+function recentFamilyCounts(lifeLog = []) {
+  const counts = {};
+  for (const line of recentLifeLines(lifeLog, 10)) {
+    for (const [family, words] of Object.entries(FAMILY_KEYWORDS)) {
+      if (words.some((word) => line.includes(word))) counts[family] = (counts[family] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function recentLocationCount(lifeLog = [], label = "") {
+  if (!label) return 0;
+  return (Array.isArray(lifeLog) ? lifeLog : []).slice(0, 8).filter((entry) => entry.location === label).length;
+}
+
+function findCurrentLocation(currentState) {
+  const location = currentState?.location || "";
+  if (!location) return null;
+  return matchHogwartsLocations(location, 1)[0] || HOGWARTS_LOCATIONS.find((place) => place.label === location) || null;
+}
+
+function resolvePeopleHints(place, { userText = "", characters = [], ocs = [], player = {}, lifeLog = [] } = {}) {
+  const hints = new Set();
+  const normalized = (value) => String(value || "").replace(/[·・\s]/g, "");
+  const hasSimilarHint = (value) => {
+    const next = normalized(value);
+    return [...hints].some((hint) => {
+      const current = normalized(hint);
+      return current && next && (current.includes(next) || next.includes(current));
+    });
+  };
+  const addHint = (value) => {
+    if (!value || hasSimilarHint(value)) return;
+    hints.add(value);
+  };
+  (place?.likelyPeople || []).slice(0, 4).forEach(addHint);
+  const compact = String(userText || "");
+  const all = [
+    ...(characters || []).map((c) => ({ id: c.id, name: c.name })),
+    ...(ocs || []).map((o) => ({ id: o.id, name: o.name })),
+  ].filter((c) => c.id && c.name);
+  for (const c of all) {
+    const short = c.name.split(/[·・]/).filter(Boolean);
+    if (compact.includes(c.name) || short.some((x) => x.length >= 2 && compact.includes(x))) addHint(c.name);
+  }
+  const favor = player?.favor || {};
+  Object.entries(favor)
+    .filter(([, value]) => Number(value) >= 20)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, 2)
+    .forEach(([id]) => {
+      const target = all.find((c) => c.id === id);
+      if (target) addHint(target.name);
+    });
+  for (const entry of (Array.isArray(lifeLog) ? lifeLog : []).slice(0, 4)) {
+    if (entry.location !== place?.label) continue;
+    for (const id of [...(entry.presentCharacterIds || []), ...(entry.interactionCharacterIds || [])]) {
+      const target = all.find((c) => c.id === id);
+      if (target) addHint(target.name);
+    }
+  }
+  return [...hints].slice(0, 5);
+}
+
+function chooseVariant(familyId, seedText) {
+  const variants = FAMILY_VARIANTS[familyId] || ["以当前人物关系和上次事件变形"];
+  return variants[stableHash(`${familyId}|${seedText}`) % variants.length];
+}
+
+export function buildLifeEventCandidates({
+  userText = "",
+  period,
+  currentState,
+  lifeLog = [],
+  characters = [],
+  ocs = [],
+  player = {},
+  limit = 5,
+} = {}) {
+  const matched = matchHogwartsLocations(userText, 4);
+  const currentPlace = findCurrentLocation(currentState);
+  const periodPlaces = locationsForPeriod(period?.id, 10);
+  const places = [
+    ...matched,
+    ...(currentPlace ? [currentPlace] : []),
+    ...periodPlaces,
+  ].filter((place, index, arr) => place && arr.findIndex((x) => x.id === place.id) === index).slice(0, 10);
+  const intentBuckets = inferIntentBuckets(userText);
+  const intentFamilies = new Set([...intentBuckets].flatMap((bucket) => FAMILY_INTENT_WEIGHTS[bucket] || []));
+  const recentFamilies = recentFamilyCounts(lifeLog);
+  const periodId = period?.id || "morning";
+  const candidates = [];
+
+  for (const place of places) {
+    const unavailable = !(place.periods || []).includes(periodId);
+    for (const familyId of place.eventFamilies || []) {
+      let score = 1;
+      if (matched.some((p) => p.id === place.id)) score += 8;
+      if (currentPlace?.id === place.id) score += 4;
+      if (!unavailable) score += 2;
+      else score -= 3;
+      if (intentFamilies.has(familyId)) score += 5;
+      if ((periodId === "night" || periodId === "late") && ["rule_risk", "secret_clue", "quiet_moment", "letter"].includes(familyId)) score += 2;
+      if ((place.access === "restricted" || place.access === "forbidden" || place.access === "hidden") && familyId === "rule_risk") score += 4;
+      if (recentFamilies[familyId]) score += Math.min(3, recentFamilies[familyId]);
+      if (hasNegatedRisk(userText) && ["rule_risk", "consequence", "magical_mishap"].includes(familyId)) score -= 5;
+      if (score <= 0) continue;
+      const locationRepeats = recentLocationCount(lifeLog, place.label);
+      const familyRepeats = recentFamilies[familyId] || 0;
+      const people = resolvePeopleHints(place, { userText, characters, ocs, player, lifeLog });
+      const variant = chooseVariant(familyId, `${userText}|${periodId}|${place.id}|${lifeLog.length}`);
+      candidates.push({
+        id: `${place.id}:${familyId}:${periodId}`,
+        placeId: place.id,
+        placeLabel: place.label,
+        periodId,
+        familyId,
+        familyLabel: familyLabel(familyId),
+        risk: place.risk,
+        access: place.access,
+        unavailable,
+        people,
+        variant,
+        continuity: [
+          locationRepeats ? `最近已到过${place.label}，本次必须有新反应、余波或关系进展` : "",
+          familyRepeats ? `同类事件近期出现过，不能复读；要回收、变形或推进` : "",
+        ].filter(Boolean).join("；"),
+        score,
+      });
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b.score - a.score || a.placeLabel.localeCompare(b.placeLabel, "zh-Hans-CN") || a.familyLabel.localeCompare(b.familyLabel, "zh-Hans-CN"))
+    .slice(0, Math.max(1, limit));
+}
+
+export function formatEventCandidate(candidate) {
+  const people = candidate.people?.length ? `；可能人物：${candidate.people.join("、")}` : "";
+  const access = candidate.access && candidate.access !== "open" ? `；${candidate.access}` : "";
+  const risk = candidate.risk && candidate.risk !== "low" ? `；风险${candidate.risk}` : "";
+  const unavailable = candidate.unavailable ? "；当前时段不自然，除非玩家明确坚持，否则改为擦边/延后/被阻止" : "";
+  const continuity = candidate.continuity ? `；连续性：${candidate.continuity}` : "";
+  return `${candidate.placeLabel} × ${candidate.familyLabel}：${candidate.variant}${people}${access}${risk}${unavailable}${continuity}`;
+}
+
 export function buildHogwartsLifeContext({
   userText = "",
   period,
@@ -419,12 +706,17 @@ export function buildHogwartsLifeContext({
   currentState,
   storyMemory = [],
   worldMemory = [],
+  lifeLog = [],
+  characters = [],
+  ocs = [],
+  player = {},
 } = {}) {
   const matched = matchHogwartsLocations(userText);
   const periodPlaces = locationsForPeriod(period?.id, 10);
   const places = matched.length ? matched : periodPlaces;
   const continuity = recentContinuityLines(currentState, storyMemory, worldMemory);
   const roleplayIntents = inferRoleplayIntent(userText);
+  const eventCandidates = buildLifeEventCandidates({ userText, period, currentState, lifeLog, characters, ocs, player, limit: 5 });
   const familyIds = new Set();
   places.forEach((place) => (place.eventFamilies || []).forEach((id) => familyIds.add(id)));
   const familyLines = [...familyIds].slice(0, 12).map((id) => `- ${FAMILY_MAP.get(id) || id}`);
@@ -437,13 +729,14 @@ export function buildHogwartsLifeContext({
       ? `玩家意图匹配地点：\n- ${matched.map(formatLocationBrief).join("\n- ")}`
       : `此时间段自然可活动地点示例：\n- ${places.map(formatLocationBrief).join("\n- ")}`,
     familyLines.length ? `可组合事件族：\n${familyLines.join("\n")}` : "",
+    eventCandidates.length ? `动态事件候选（后台素材，不是按钮，不是固定剧情；每轮只选最自然的一到两个）：\n- ${eventCandidates.map(formatEventCandidate).join("\n- ")}` : "",
     roleplayIntents.length ? `从玩家扮演行为推断出的软倾向（不是按钮，不是固定结果）：\n- ${roleplayIntents.join("\n- ")}` : "",
     continuity.length ? `近期连续性线索（同类事件再次出现时必须变化或推进）：\n- ${continuity.join("\n- ")}` : "",
     "本轮请只选择最自然的一到两个地点/事件族组合，不要穷举；如果与过去事件相似，必须写出差异、后果或进展。",
   ].filter(Boolean).join("\n");
 }
 
-export function buildCalendarLifeContext(choiceItem, period, currentTimeLabel, currentState, storyMemory, worldMemory) {
+export function buildCalendarLifeContext(choiceItem, period, currentTimeLabel, currentState, storyMemory, worldMemory, extras = {}) {
   return buildHogwartsLifeContext({
     userText: `${choiceItem?.label || ""}\n${choiceItem?.intent || ""}`,
     period,
@@ -451,5 +744,6 @@ export function buildCalendarLifeContext(choiceItem, period, currentTimeLabel, c
     currentState,
     storyMemory,
     worldMemory,
+    ...extras,
   });
 }

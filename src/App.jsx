@@ -363,7 +363,12 @@ export default function App() {
     }
     const text = [
       buildCalendarChoiceInput(option, scenePeriod, activeProject?.currentTimeLabel),
-      buildCalendarLifeContext(option, scenePeriod, activeProject?.currentTimeLabel, activeProject?.currentState, storyMemory, worldMemory),
+      buildCalendarLifeContext(option, scenePeriod, activeProject?.currentTimeLabel, activeProject?.currentState, storyMemory, worldMemory, {
+        lifeLog: activeProject?.lifeLog,
+        characters: projectChars,
+        ocs: activeProject?.ocs,
+        player,
+      }),
     ].filter(Boolean).join("\n\n");
     if (option.nextTimeLabel || option.nextPeriodId) {
       patchProject((p) => ({
@@ -826,6 +831,10 @@ export default function App() {
         currentState: activeProject?.currentState,
         storyMemory,
         worldMemory,
+        lifeLog: activeProject?.lifeLog,
+        characters: projectChars,
+        ocs: activeProject?.ocs,
+        player,
       }));
     }
     // HP 专项：注入当前时间对应的原著剧情锚点（防跑偏）。位于硬规则之下、当前状态之上。
