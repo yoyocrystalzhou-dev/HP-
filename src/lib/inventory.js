@@ -35,6 +35,26 @@ export const REQUIRED_SCHOOL_ITEM_IDS = [
   "quill_parchment",
 ];
 
+export const PURCHASE_CHECKLIST = [
+  { id: "wand", required: true, shop: "奥利凡德魔杖店", group: "魔法核心" },
+  { id: "school_robes", required: true, shop: "摩金夫人长袍店", group: "制服" },
+  { id: "school_books", required: true, shop: "丽痕书店", group: "课本" },
+  { id: "cauldron", required: true, shop: "坩埚店/魔药材料店", group: "魔药器材" },
+  { id: "potion_kit", required: true, shop: "魔药材料店", group: "魔药器材" },
+  { id: "scales_phials", required: true, shop: "魔药材料店", group: "魔药器材" },
+  { id: "telescope", required: true, shop: "天文用品店", group: "学习用品" },
+  { id: "quill_parchment", required: true, shop: "文具店", group: "学习用品" },
+  { id: "wizard_money", required: false, shop: "古灵阁", group: "采购准备" },
+  { id: "trunk", required: false, shop: "行李店", group: "行李" },
+  { id: "owl", required: false, shop: "咿啦猫头鹰商店", group: "宠物" },
+  { id: "cat", required: false, shop: "宠物店", group: "宠物" },
+  { id: "toad", required: false, shop: "宠物店", group: "宠物" },
+  { id: "broom", required: false, shop: "魁地奇精品店", group: "飞行用品" },
+  { id: "sweets", required: false, shop: "糖果店", group: "零食/礼物" },
+];
+
+export const INVENTORY_HISTORY_LIMIT = 30;
+
 export function createInitialInventory() {
   return normalizeInventory({
     items: {
@@ -68,6 +88,7 @@ export function normalizeInventory(inventory) {
   return {
     items,
     notes: Array.isArray(inventory?.notes) ? inventory.notes : [],
+    history: Array.isArray(inventory?.history) ? inventory.history.slice(0, INVENTORY_HISTORY_LIMIT) : [],
     updatedAt: inventory?.updatedAt || now(),
   };
 }
@@ -77,27 +98,76 @@ export function hasItem(inventory, id) {
 }
 
 export function missingRequiredItems(inventory) {
+  return missingRequiredItemEntries(inventory).map((entry) => entry.label);
+}
+
+export function shoppingProgress(inventory) {
   const inv = normalizeInventory(inventory);
-  return REQUIRED_SCHOOL_ITEM_IDS.filter((id) => !inv.items[id]).map((id) => ITEM_CATALOG[id]?.label || id);
+  const entries = PURCHASE_CHECKLIST.map((entry) => {
+    const catalog = ITEM_CATALOG[entry.id] || {};
+    const owned = !!inv.items[entry.id];
+    return {
+      ...entry,
+      label: catalog.label || entry.id,
+      category: catalog.category || entry.group || "物品",
+      owned,
+      item: inv.items[entry.id] || null,
+    };
+  });
+  const required = entries.filter((entry) => entry.required);
+  const requiredOwned = required.filter((entry) => entry.owned);
+  const missingRequired = required.filter((entry) => !entry.owned);
+  const optionalOwned = entries.filter((entry) => !entry.required && entry.owned);
+  return {
+    entries,
+    required,
+    requiredOwned,
+    missingRequired,
+    optionalOwned,
+    requiredTotal: required.length,
+    requiredOwnedCount: requiredOwned.length,
+    percent: required.length ? Math.round((requiredOwned.length / required.length) * 100) : 100,
+    complete: missingRequired.length === 0,
+  };
+}
+
+export function missingRequiredItemEntries(inventory) {
+  return shoppingProgress(inventory).missingRequired;
 }
 
 export function applyInventoryChanges(inventory, changes = []) {
   const inv = normalizeInventory(inventory);
   let changed = false;
+  const history = [...(inv.history || [])];
+  const mergeNotes = (...values) => [...new Set(values
+    .flatMap((value) => String(value || "").split("；"))
+    .map((value) => value.trim())
+    .filter(Boolean))].join("；");
   for (const change of changes) {
     if (!change?.id) continue;
     const existing = inv.items[change.id];
+    const catalog = ITEM_CATALOG[change.id] || {};
+    const acquiredAt = existing?.acquiredAt || change.acquiredAt || now();
     inv.items[change.id] = createInventoryItem(change.id, {
       ...existing,
       ...change,
       qty: Math.max(Number(existing?.qty || 0), Number(change.qty || 1)),
       source: change.source || existing?.source || "",
-      notes: [existing?.notes, change.notes].filter(Boolean).join("；"),
-      acquiredAt: existing?.acquiredAt || change.acquiredAt || now(),
+      notes: mergeNotes(existing?.notes, change.notes),
+      acquiredAt,
     });
+    if (!existing) {
+      history.unshift({
+        id: change.id,
+        label: change.label || catalog.label || change.id,
+        source: change.source || "",
+        notes: change.notes || "",
+        acquiredAt,
+      });
+    }
     changed = true;
   }
-  return changed ? { ...inv, updatedAt: now() } : inv;
+  return changed ? { ...inv, history: history.slice(0, INVENTORY_HISTORY_LIMIT), updatedAt: now() } : inv;
 }
 
 function item(id, source, notes = "") {
@@ -161,12 +231,16 @@ export function formatInventoryBlock(inventory) {
   const inv = normalizeInventory(inventory);
   const items = Object.values(inv.items);
   const owned = items.length ? items.map((i) => `${i.label}${i.notes ? `（${i.notes}）` : ""}`).join("、") : "无明确记录";
-  const missing = missingRequiredItems(inv);
+  const progress = shoppingProgress(inv);
+  const missing = progress.missingRequired;
+  const recent = (inv.history || []).slice(0, 5).map((entry) => `${entry.label}${entry.source ? `（${entry.source}）` : ""}`);
   return [
     "【玩家物品 / 背包】",
     `已确认拥有：${owned}`,
-    missing.length ? `入学用品未确认：${missing.join("、")}` : "入学用品：核心用品已齐。",
-  ].join("\n");
+    `入学采购进度：${progress.requiredOwnedCount}/${progress.requiredTotal}（${progress.percent}%）`,
+    missing.length ? `入学用品待购：${missing.map((entry) => `${entry.label}@${entry.shop}`).join("、")}` : "入学用品：核心用品已齐。",
+    recent.length ? `最近入手：${recent.join("、")}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 export const INVENTORY_RULES =
@@ -174,4 +248,5 @@ export const INVENTORY_RULES =
   "- 只有【玩家物品 / 背包】里明确拥有的物品，才能被当作玩家当前可使用物品。\n" +
   "- 不要因为玩家随口提到斗篷、地图、扫帚、宠物或特殊道具，就默认 TA 已拥有；若背包没有，写成想象、借用意图、需要购买、需要向别人借，或无法直接使用。\n" +
   "- 课堂和公共器材可以由学校提供，但私人物品、礼物、特殊道具和长期装备必须经过剧情获得或采购记录。\n" +
-  "- 对角巷采购可以自然补齐入学用品；同一物品再次出现时，请体现为检查、整理、使用或遗失，而不是重复购买刷收益。";
+  "- 对角巷采购可以自然补齐入学用品；若清单仍有待购物品，请通过店铺、整理行李、家人提醒或采购日程自然提示，不要硬塞任务板。\n" +
+  "- 同一物品再次出现时，请体现为检查、整理、使用、借出、遗失或被别人注意到，而不是重复购买刷收益。";

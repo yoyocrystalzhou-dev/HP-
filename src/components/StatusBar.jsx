@@ -1,7 +1,7 @@
 import { GOLD, GOLD_DIM, INK, MUTED, FONT_HUA } from "./hpAtmosphere.jsx";
 import { STAT_DEFS, STAT_MAX, STAMINA_MAX, normalizeStats } from "../lib/stats.js";
 import { COURSES, normalizeCourses } from "../lib/courses.js";
-import { normalizeInventory, missingRequiredItems } from "../lib/inventory.js";
+import { normalizeInventory, missingRequiredItems, shoppingProgress } from "../lib/inventory.js";
 import { clueSummary } from "../lib/clues.js";
 
 /**
@@ -22,6 +22,7 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
   const inventory = normalizeInventory(player.inventory);
   const ownedItems = Object.values(inventory.items);
   const missingItems = missingRequiredItems(inventory);
+  const purchase = shoppingProgress(inventory);
   const cluesInfo = clueSummary(clues);
   const isDay = uiMode === "day";
   const C = isDay
@@ -142,12 +143,28 @@ export default function StatusBar({ player, variant = "rail", uiMode = "night", 
       {showInventory && <div style={{ padding: isSheet ? "10px 20px" : "10px 16px", borderTop: `1px solid ${C.line}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 5 }}>
           <span style={{ fontSize: 11.5, color: C.muted }}>🎒 物品</span>
-          {missingItems.length > 0 && <span style={{ fontSize: 10.5, color: C.gold }}>待采购 {missingItems.length}</span>}
+          <span style={{ fontSize: 10.5, color: missingItems.length ? C.gold : C.muted }}>
+            入学 {purchase.requiredOwnedCount}/{purchase.requiredTotal}
+          </span>
+        </div>
+        <div style={{ height: 5, borderRadius: 999, background: C.track, overflow: "hidden", marginBottom: 7 }}>
+          <div style={{ width: `${purchase.percent}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${C.goldDim}, ${C.gold})` }} />
         </div>
         <div style={{ fontSize: 10.8, color: C.muted, lineHeight: 1.45 }}>
           {ownedItems.slice(0, isSheet ? 12 : 6).map((i) => i.label).join("、") || "暂无明确物品"}
           {ownedItems.length > (isSheet ? 12 : 6) ? ` 等 ${ownedItems.length} 件` : ""}
         </div>
+        {missingItems.length > 0 && (
+          <div style={{ fontSize: 10.5, color: C.goldDim, lineHeight: 1.45, marginTop: 6 }}>
+            待购：{purchase.missingRequired.slice(0, isSheet ? 8 : 3).map((entry) => `${entry.label}@${entry.shop}`).join("、")}
+            {purchase.missingRequired.length > (isSheet ? 8 : 3) ? "…" : ""}
+          </div>
+        )}
+        {(inventory.history || []).length > 0 && (
+          <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.45, marginTop: 6 }}>
+            最近入手：{inventory.history.slice(0, isSheet ? 4 : 2).map((entry) => entry.label).join("、")}
+          </div>
+        )}
       </div>}
 
       {/* 课程数值 */}
