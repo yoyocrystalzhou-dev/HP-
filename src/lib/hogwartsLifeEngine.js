@@ -52,10 +52,16 @@ export const HOGWARTS_LOCATIONS = [
     eventFamilies: ["public_encounter", "misunderstanding", "rivalry", "friendship"],
   }),
   loc("potion_supply_shop", "魔药材料店", "校外购物区", ["魔药材料", "坩埚", "开学前"], {
-    aliases: ["魔药材料店", "药材店", "坩埚店", "买坩埚", "买课本材料"],
+    aliases: ["魔药材料店", "魔药店", "药材店", "坩埚店", "买坩埚", "买课本材料"],
     periods: ["morning", "afternoon"],
     likelyPeople: ["店主", "采购学生", "斯莱特林家庭"],
     eventFamilies: ["magical_mishap", "lost_object", "public_encounter", "rumor"],
+  }),
+  loc("scribbulus", "斯克里布鲁斯文具店", "校外购物区", ["文具", "羽毛笔", "墨水", "羊皮纸"], {
+    aliases: ["斯克里布鲁斯", "文具店", "羽毛笔店", "墨水店", "买文具", "买羽毛笔", "羊皮纸店"],
+    periods: ["morning", "afternoon"],
+    likelyPeople: ["店主", "采购学生", "挑选文具的新生"],
+    eventFamilies: ["lost_object", "public_encounter", "quiet_moment", "magical_mishap"],
   }),
   loc("kings_cross", "国王十字车站", "校外交通", ["站台", "麻瓜", "开学"], {
     aliases: ["国王十字", "九又四分之三", "站台", "车站"],
@@ -381,6 +387,19 @@ const FAMILY_VARIANTS = {
   misunderstanding: ["只听到半句话", "对方误读了玩家动作", "玩家被错认或错怪", "误会可澄清也可暂时留下"],
 };
 
+const PLACE_FAMILY_VARIANTS = {
+  scribbulus: {
+    magical_mishap: ["墨水瓶轻微失控", "羽毛笔自己划出一行字", "羊皮纸边缘忽然卷起", "试写用的魔法墨水晕开"],
+    lost_object: ["误拿了别人的羽毛笔", "羊皮纸卷轴夹错了包", "归还墨水瓶制造短暂停顿", "标签写错引出小误会"],
+  },
+  potion_supply_shop: {
+    magical_mishap: ["魔药气味不对", "粉末短暂变色", "玻璃瓶轻轻震动", "坩埚边缘冒出一缕烟"],
+  },
+  ollivanders: {
+    magical_mishap: ["魔杖尖端溅出火星", "架子轻轻震了一下", "试杖造成可控的小混乱", "风从盒缝里掠过"],
+  },
+};
+
 const FAMILY_KEYWORDS = {
   secret_clue: ["线索", "异常", "脚印", "纸条", "秘密", "713", "禁区", "藏"],
   research_clue: ["资料", "借阅", "书页", "脚注", "报纸", "图书馆"],
@@ -500,10 +519,19 @@ export function matchHogwartsLocations(text, limit = 5) {
     const names = [place.label, place.id, ...(place.aliases || [])];
     for (const name of names) {
       const n = normalizeText(name);
-      if (n && raw.includes(n)) score += n.length > 2 ? 3 : 1;
-    }
-    for (const tag of place.tags || []) {
-      if (raw.includes(normalizeText(tag))) score += 1;
+      if (!n) continue;
+      let index = raw.indexOf(n);
+      while (index >= 0) {
+        const before = raw.slice(Math.max(0, index - 12), index);
+        const after = raw.slice(index + n.length, index + n.length + 10);
+        const pastContext = /(刚才|之前|先前|上次|方才|刚刚|早些时候|上一家|离开|离开了).{0,5}$/.test(before);
+        let aliasScore = n.length > 2 ? 3 : 1;
+        if (!pastContext && /(当前|现在|正在|此刻|这里|这家|本轮|在|到|到了|来到|进入|走进|推开|站在|坐在|逛到|转进|去|去了).{0,3}$/.test(before)) aliasScore += 9;
+        if (/^(里|内|店里|门口|柜台|附近|旁边)/.test(after)) aliasScore += 3;
+        if (pastContext) aliasScore -= 12;
+        score += Math.max(0, aliasScore);
+        index = raw.indexOf(n, index + n.length);
+      }
     }
     if (score) scored.push({ place, score });
   }
@@ -647,7 +675,7 @@ function buildSceneContinuityHints({ places = [], lifeLog = [], limit = 4 } = {}
     for (const entry of recent) {
       const summary = summarizeLifeEntry(entry);
       if (!summary) continue;
-      hints.push(`${place.label}上次：${summary}；本次必须体现新反应、余波、线索小进展、关系变化或平静落空，不要重写同一幕。`);
+      hints.push(`${place.label}上次：${summary}；这是过去片段。本次若仍在同地点，必须体现新反应、余波、线索小进展、关系变化或平静落空，不要重写同一幕。若人物已离开，不得又写成仍在原地。`);
     }
   }
   if (hints.length < limit) {
@@ -656,7 +684,7 @@ function buildSceneContinuityHints({ places = [], lifeLog = [], limit = 4 } = {}
       const summary = summarizeLifeEntry(entry);
       if (!summary) continue;
       const label = entry.location || "近期事件";
-      hints.push(`${label}前情：${summary}；若本轮触及相同人物、物品或线索，要让过去留下痕迹。`);
+      hints.push(`${label}前情：${summary}；这是已发生的过去。除非玩家明确带来、寻找、提起或回到该地点，不得把这里的人物、商品、道具或异常自动搬到当前场景。若本轮确实触及相同人物/物品/线索，只写余波或进展。`);
       if (hints.length >= limit) break;
     }
   }
@@ -718,8 +746,8 @@ function resolvePeopleHints(place, { userText = "", characters = [], ocs = [], p
   return [...hints].slice(0, 5);
 }
 
-function chooseVariant(familyId, seedText) {
-  const variants = FAMILY_VARIANTS[familyId] || ["以当前人物关系和上次事件变形"];
+function chooseVariant(familyId, seedText, place) {
+  const variants = PLACE_FAMILY_VARIANTS[place?.id]?.[familyId] || FAMILY_VARIANTS[familyId] || ["以当前人物关系和上次事件变形"];
   return variants[stableHash(`${familyId}|${seedText}`) % variants.length];
 }
 
@@ -764,7 +792,7 @@ export function buildLifeEventCandidates({
       const locationRepeats = recentLocationCount(lifeLog, place.label);
       const familyRepeats = recentFamilies[familyId] || 0;
       const people = resolvePeopleHints(place, { userText, characters, ocs, player, lifeLog });
-      const variant = chooseVariant(familyId, `${userText}|${periodId}|${place.id}|${lifeLog.length}`);
+      const variant = chooseVariant(familyId, `${userText}|${periodId}|${place.id}|${lifeLog.length}`, place);
       const progression = chooseProgressionMode({ familyId, placeLabel: place.label, userText, lifeLog, locationRepeats, familyRepeats });
       candidates.push({
         id: `${place.id}:${familyId}:${periodId}`,
@@ -837,6 +865,7 @@ export function buildHogwartsLifeContext({
     "【本轮霍格沃茨生活矩阵】",
     currentTimeLabel ? `当前日期：${currentTimeLabel}` : "",
     period ? `当前时间段：${period.label}（${period.instruction}）` : "",
+    currentState?.location ? `当前剧情状态地点：${currentState.location}。若玩家本轮输入明确进入新地点，以玩家输入的新地点为准；旧日志地点只是过去。` : "",
     matched.length
       ? `玩家意图匹配地点：\n- ${matched.map(formatLocationBrief).join("\n- ")}`
       : `此时间段自然可活动地点示例：\n- ${places.map(formatLocationBrief).join("\n- ")}`,
@@ -846,6 +875,7 @@ export function buildHogwartsLifeContext({
     roleplayIntents.length ? `从玩家扮演行为推断出的软倾向（不是按钮，不是固定结果）：\n- ${roleplayIntents.join("\n- ")}` : "",
     sceneContinuity.length ? `具体前情回收（重复地点/人物/物品/线索时优先使用这一段）：\n- ${sceneContinuity.join("\n- ")}` : "",
     continuity.length ? `近期连续性线索（同类事件再次出现时必须变化或推进）：\n- ${continuity.join("\n- ")}` : "",
+    "场景记忆隔离：历史日志、旧店铺、旧人物位置和旧商品只说明过去发生过；不得把上一家店的商品/材料、已离开的角色或旧地点状态复写到当前场景，除非玩家明确携带、询问、回到或追踪它们。",
     "本轮请只选择最自然的一到两个地点/事件族组合，不要穷举；如果与过去事件相似，必须写出差异、后果或进展。",
   ].filter(Boolean).join("\n");
 }

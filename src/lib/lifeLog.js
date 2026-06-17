@@ -9,7 +9,8 @@ const EXTRA_LOCATIONS = [
   { id: "ollivanders", label: "奥利凡德魔杖店", aliases: ["奥利凡德", "魔杖店"] },
   { id: "madam_malkins", label: "摩金夫人长袍店", aliases: ["摩金夫人", "长袍店", "校袍店"] },
   { id: "flourish_blotts", label: "丽痕书店", aliases: ["丽痕书店", "书店", "课本"] },
-  { id: "potion_supply_shop", label: "魔药材料店", aliases: ["魔药材料店", "药材店", "坩埚店"] },
+  { id: "potion_supply_shop", label: "魔药材料店", aliases: ["魔药材料店", "魔药店", "药材店", "坩埚店"] },
+  { id: "scribbulus", label: "斯克里布鲁斯文具店", aliases: ["斯克里布鲁斯", "文具店", "羽毛笔店", "墨水店", "买文具", "买羽毛笔", "羊皮纸店"] },
   { id: "kings_cross", label: "国王十字车站", aliases: ["国王十字", "九又四分之三", "站台"] },
   { id: "hogwarts_express", label: "霍格沃茨特快", aliases: ["霍格沃茨特快", "列车", "包厢", "车厢"] },
 ];
@@ -69,7 +70,18 @@ export function detectLifeLocation(text, fallback = "") {
     for (const alias of place.aliases || []) {
       const a = normalizeText(alias).toLowerCase();
       if (!a) continue;
-      if (raw.includes(a)) score += Math.max(1, Math.min(8, a.length));
+      let index = raw.indexOf(a);
+      while (index >= 0) {
+        const before = raw.slice(Math.max(0, index - 12), index);
+        const after = raw.slice(index + a.length, index + a.length + 10);
+        const pastContext = /(刚才|之前|先前|上次|方才|刚刚|早些时候|上一家|离开|离开了).{0,5}$/.test(before);
+        let aliasScore = Math.max(1, Math.min(8, a.length));
+        if (!pastContext && /(当前|现在|正在|此刻|这里|这家|本轮|在|到|到了|来到|进入|走进|推开|站在|坐在|逛到|转进|去|去了).{0,3}$/.test(before)) aliasScore += 12;
+        if (/^(里|内|店里|门口|柜台|附近|旁边)/.test(after)) aliasScore += 4;
+        if (pastContext) aliasScore -= 16;
+        score += Math.max(0, aliasScore);
+        index = raw.indexOf(a, index + a.length);
+      }
     }
     if (score) scored.push({ place, score });
   }
@@ -217,5 +229,9 @@ export function formatLifeLogBlock(lifeLog = [], { nameMap = {}, limit = 8 } = {
     ].filter(Boolean);
     return `- ${bits.join("；")}`;
   });
-  return "【近期生活日志（程序记录，按此保持连续性；不得把未互动人物当作已互动）】\n" + lines.join("\n");
+  return (
+    "【近期生活日志（程序记录，倒序；这是已经发生的过去，不代表人物仍在原地、物品仍在眼前或当前地点未变）】\n" +
+    "使用规则：当前场景以【当前剧情状态】和玩家本轮输入为准；只在玩家明确回到同一地点、携带/提起同一物品、或同一人物继续互动时回收日志。不得把过去店铺的人物、商品或道具自动搬到新地点。\n" +
+    lines.join("\n")
+  );
 }

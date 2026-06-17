@@ -113,6 +113,37 @@ const lifeLog = [
 }
 
 {
+  const context = buildHogwartsLifeContext({
+    userText: "我走进文具店挑羽毛笔，刚才在魔药材料店闻到的月长石粉末味道还留在袖口。",
+    period: dayPeriod("afternoon"),
+    currentTimeLabel: "1991年8月16日 · 对角巷采购",
+    currentState: { location: "斯克里布鲁斯文具店" },
+    lifeLog: [{
+      id: "log-potion",
+      location: "魔药材料店",
+      scene: "玩家在魔药材料店听店员提到月长石粉末短缺。",
+      assistantText: "月长石粉末被装进玻璃瓶里，店员压低声音说最近货不多。",
+      presentCharacterIds: [],
+      interactionCharacterIds: [],
+    }, {
+      id: "log-malkin",
+      location: "摩金夫人长袍店",
+      scene: "德拉科在摩金夫人长袍店和玩家交谈后一起离开。",
+      presentCharacterIds: ["draco"],
+      interactionCharacterIds: ["draco"],
+    }],
+    characters: cast,
+    player: { favor: { draco: 1 } },
+  });
+  ok(context.includes("斯克里布鲁斯文具店"), "stationery shop is recognized as the current location");
+  ok(context.includes("场景记忆隔离") && context.includes("不得把上一家店的商品/材料"), "context explicitly blocks old shop item leakage");
+  ok(context.includes("魔药材料店前情") && context.includes("这是已发生的过去"), "previous potion shop memory is marked as past");
+  ok(context.includes("摩金夫人长袍店前情") && context.includes("已离开"), "prior Draco departure remains a past continuity hint");
+  ok(!context.includes("- 魔药材料店 ×"), "previous potion shop does not become a current dynamic event candidate");
+  ok(!context.includes("斯克里布鲁斯文具店 × 魔法小事故：魔药气味不对"), "stationery shop mishaps do not reuse potion-shop variants");
+}
+
+{
   const first = buildLifeEventCandidates({
     userText: "我在黑湖边坐一会。",
     period: dayPeriod("dinner"),

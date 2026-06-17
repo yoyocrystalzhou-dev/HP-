@@ -22,6 +22,7 @@ const ok = (cond, msg) => {
   ok(HP_NARRATION_GUARD.includes("标签必须完整闭合"), "HP narration guard requires closed backend tags");
   ok(HP_NARRATION_GUARD.includes("300-550") && HP_NARRATION_GUARD.includes("写到玩家需要再次行动或回应的位置就停笔"), "HP narration guard keeps visible replies paced and stoppable");
   ok(HP_NARRATION_GUARD.includes("文风只影响描写质感") && HP_NARRATION_GUARD.includes("不得替玩家说话"), "HP narration guard protects player agency from style-driven autopilot");
+  ok(HP_NARRATION_GUARD.includes("历史日志只代表过去发生过") && HP_NARRATION_GUARD.includes("上一家店铺的商品"), "HP narration guard prevents old scene and shop-item leakage");
   ok(AMBIGUOUS_ATMOSPHERE_STYLE.includes("不是篇幅失控") && AMBIGUOUS_ATMOSPHERE_STYLE.includes("1-2 个感官细节"), "ambiguous atmosphere style is capped to texture rather than long-form expansion");
   ok(!HP_NARRATION_GUARD.includes("非 HP"), "HP guard does not frame the simulator as a non-HP fallback");
 }

@@ -375,7 +375,7 @@ export function formatCurrentState(cs, { nameMap = {} } = {}) {
     const items = (arr || []).map((i) => i.content).filter(Boolean);
     if (items.length) stateLines.push(`${label}：\n- ${items.join("\n- ")}`);
   };
-  block("近期事件", cs.recentEvents);
+  block("近期已发生事件（不是当前仍在发生）", cs.recentEvents);
   block("未解决伏线", cs.unresolvedThreads);
   block("已知事实", cs.knownFacts);
   const forbidden = (cs.forbiddenAssumptions || []).map((i) => i.content).filter(Boolean);

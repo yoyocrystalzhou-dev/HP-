@@ -28,6 +28,8 @@ const cast = [
 {
   ok(detectLifeLocation("我推开古灵阁沉重的青铜大门。", "") === "古灵阁", "detects Diagon Alley bank location");
   ok(detectLifeLocation("我在图书馆查资料。", "") === "图书馆", "detects Hogwarts location");
+  ok(detectLifeLocation("我走进文具店，刚才在魔药材料店闻到的月长石粉末味道还留在袖口。", "") === "斯克里布鲁斯文具店", "current stationery shop beats previous potion shop mention");
+  ok(detectLifeLocation("我在斯克里布鲁斯文具店挑羽毛笔，之前离开了魔药店。", "") === "斯克里布鲁斯文具店", "Scribbulus aliases resolve as current location");
 }
 
 {
@@ -73,6 +75,7 @@ const cast = [
 
   const block = formatLifeLogBlock(updated.lifeLog, { nameMap: Object.fromEntries(cast.map((c) => [c.id, c])) });
   ok(block.includes("近期生活日志") && block.includes("古灵阁") && block.includes("在场：哈利"), "life log prompt block renders continuity");
+  ok(block.includes("这是已经发生的过去") && block.includes("不得把过去店铺的人物、商品或道具自动搬到新地点"), "life log block isolates past scenes from current scene");
 }
 
 {
