@@ -11,11 +11,11 @@ import {
 } from "../src/lib/projects.js";
 import { applyInventoryChanges, createInitialInventory, inferShoppingChanges, hasItem, missingRequiredItems } from "../src/lib/inventory.js";
 import { parseActionCommand, runAction, ACTIONS, checkEffects } from "../src/lib/checks.js";
-import { parseDailyGrowth, applyDailyGrowth } from "../src/lib/dailyGrowth.js";
+import { parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "../src/lib/dailyGrowth.js";
 import { applyRelationshipDeltas, filterRelationshipDeltasByEvidence, findCharacter, inferFavorDeltas, parseRelationshipDeltas } from "../src/lib/affinity.js";
 import { createOC, formatOcs } from "../src/lib/oc.js";
 import { calendarMoment, advanceCalendarClock, buildCalendarChoiceInput } from "../src/lib/schoolCalendar.js";
-import { inferNaturalCommand, adjustedActionCost, inventoryIssueForCommand, settleExam } from "../src/lib/lifeMechanics.js";
+import { inferNaturalCommand, adjustedActionCost, inventoryIssueForCommand, settleExam, applyLocationGateToCommand } from "../src/lib/lifeMechanics.js";
 import { lessonsFor, timetableContext, weekdayForLabel } from "../src/lib/timetable.js";
 import { mergeClues, parseClueTags, activeClues } from "../src/lib/clues.js";
 import { houseCupBoard, settleHouseCup } from "../src/lib/houseCup.js";
@@ -94,6 +94,12 @@ const player = createPlayerCharacter({
   const flightOk = inferNaturalCommand("我在魁地奇球场骑上扫帚参加训练。", { periodId: "afternoon", currentTimeLabel: "1991年9月2日" });
   ok(flightOk?.command === "飞行" && !flightOk.blockedReason, "flying is allowed on the pitch");
 
+  const currentHallFlight = inferNaturalCommand("我骑上扫帚飞起来。", { periodId: "afternoon", currentTimeLabel: "1991年9月2日", currentLocation: "礼堂" });
+  ok(currentHallFlight?.blockedReason.includes("城堡室内"), "current location blocks flying even when user omits location text");
+
+  const currentPitchFlight = inferNaturalCommand("我骑上扫帚飞起来。", { periodId: "afternoon", currentTimeLabel: "1991年9月2日", currentLocation: "魁地奇球场" });
+  ok(currentPitchFlight?.command === "飞行" && !currentPitchFlight.blockedReason, "current outdoor training location allows flying");
+
   const observe = inferNaturalCommand("我远远看着德拉科为什么还没回寝室。", { periodId: "late", currentTimeLabel: "1991年9月2日" });
   ok(!observe, "pure observation does not trigger a check");
 
@@ -105,6 +111,8 @@ const player = createPlayerCharacter({
 {
   const cmd = parseActionCommand("/练咒 漂浮咒");
   ok(cmd?.command === "练咒", "slash command parses spell practice");
+  const explicitFlight = applyLocationGateToCommand(parseActionCommand("/飞行"), "/飞行", { currentLocation: "礼堂" });
+  ok(explicitFlight?.blockedReason.includes("城堡室内"), "explicit slash action also respects current-location gate");
   const check = runAction(ACTIONS.练咒, player, { roll: 12 });
   const effects = checkEffects(ACTIONS.练咒, check);
   ok(check.success && effects.delta >= 1, "successful spell check grants progress");
@@ -117,7 +125,12 @@ const player = createPlayerCharacter({
   const parsed = parseDailyGrowth("正文\n【日常成长：学术+9；学院分-99；体力+99】");
   ok(parsed.cleaned === "正文" && parsed.entries.find((x) => x.key === "academic")?.delta === 3, "daily growth hides tag and clamps academic");
   const grown = applyDailyGrowth({ academic: 99, housePoints: 5, stamina: STAMINA_MAX - 1 }, parsed.entries);
-  ok(grown.academic === 100 && grown.housePoints === 0 && grown.stamina === STAMINA_MAX, "daily growth respects stat bounds");
+  ok(grown.academic === 100 && grown.housePoints === 5 && grown.stamina === STAMINA_MAX, "daily growth respects stat bounds and rejects unsupported house points");
+  ok(!parsed.entries.some((x) => x.key === "housePoints"), "daily growth rejects house points without explicit reason");
+  const withReason = parseDailyGrowth("正文\n【日常成长：学院分+12：麦格教授因课堂回答加分；魔法+2】");
+  const hp = withReason.entries.find((x) => x.key === "housePoints");
+  ok(hp?.delta === 10 && hp.reason.includes("麦格教授"), "house points require a concrete reason and remain clamped");
+  ok(formatDailyGrowth(withReason.entries).includes("麦格教授因课堂回答加分"), "growth summary preserves house-point reason");
 }
 
 // 8. Affinity supports canon + OC and avoids distant observation.

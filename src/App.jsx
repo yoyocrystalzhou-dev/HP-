@@ -48,7 +48,7 @@ import { buildPresenceContext } from "./lib/presence.js";
 import { dayPeriod, advanceCalendarClock, calendarMoment, buildCalendarChoiceInput, scheduleContext, formatScheduleContextBlock } from "./lib/schoolCalendar.js";
 import { timetableContext } from "./lib/timetable.js";
 import { DAILY_GROWTH_RULES, parseDailyGrowth, applyDailyGrowth, formatDailyGrowth } from "./lib/dailyGrowth.js";
-import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand } from "./lib/lifeMechanics.js";
+import { inferNaturalCommand, adjustedActionCost, shouldAdvancePeriod, settleExam, formatExamLine, examAnchor, inventoryIssueForCommand, applyLocationGateToCommand } from "./lib/lifeMechanics.js";
 import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShoppingChanges, formatInventoryChangeLine } from "./lib/inventory.js";
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
@@ -1427,9 +1427,12 @@ ${transcriptLines(chunk)}`;
         return { ...p, playerCharacter: { ...pc, stats: applyDailyGrowth(pc.stats, growthEntries) } };
       });
     }
-    const explicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
+    const rawExplicitCmd = !disableActions && HP_KIOSK && activeMode === "world" ? parseActionCommand(text) : null;
+    const explicitCmd = rawExplicitCmd
+      ? applyLocationGateToCommand(rawExplicitCmd, text, { currentLocation: activeProject?.currentState?.location })
+      : null;
     const naturalCmd = !explicitCmd && !disableActions && HP_KIOSK && activeMode === "world"
-      ? inferNaturalCommand(text, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel })
+      ? inferNaturalCommand(text, { periodId: scenePeriodId, currentTimeLabel: activeProject?.currentTimeLabel, currentLocation: activeProject?.currentState?.location })
       : null;
     const baseCmd = explicitCmd || naturalCmd;
     const itemIssue = baseCmd ? inventoryIssueForCommand(baseCmd, nextInventory) : "";

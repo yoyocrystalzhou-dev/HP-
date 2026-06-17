@@ -33,6 +33,12 @@ function matchExplicitLocations(text, limit = 4) {
     .map((x) => x.place);
 }
 
+function placesFromTextOrFallback(text, fallbackLocation = "", limit = 4) {
+  const explicit = matchExplicitLocations(text, limit);
+  if (explicit.length || !fallbackLocation) return explicit;
+  return matchExplicitLocations(fallbackLocation, 1);
+}
+
 const SAFE_NIGHT_LOCATIONS = new Set(["common_room", "dormitory", "hospital_wing"]);
 const RISK_ACCESS = new Set(["restricted", "forbidden", "hidden"]);
 const NIGHT_PUBLIC_RISK = new Set([
@@ -99,8 +105,8 @@ function actionLocationIssue(command, places) {
   return null;
 }
 
-function withLocationGate(command, action, target, text) {
-  const places = matchExplicitLocations(text, 4);
+function withLocationGate(command, action, target, text, fallbackLocation = "") {
+  const places = placesFromTextOrFallback(text, fallbackLocation, 4);
   const issue = actionLocationIssue(command, places);
   return {
     command,
@@ -112,8 +118,17 @@ function withLocationGate(command, action, target, text) {
   };
 }
 
-function inferRiskyMovement(text, periodId) {
-  const places = matchExplicitLocations(text, 4);
+export function applyLocationGateToCommand(cmd, text = "", { currentLocation = "" } = {}) {
+  if (!cmd?.command || !cmd.action || cmd.blockedReason || !ACTION_LOCATION_RULES[cmd.command]) return cmd;
+  return {
+    ...cmd,
+    ...withLocationGate(cmd.command, cmd.action, cmd.target || "", text, currentLocation),
+    inferred: !!cmd.inferred,
+  };
+}
+
+function inferRiskyMovement(text, periodId, fallbackLocation = "") {
+  const places = placesFromTextOrFallback(text, fallbackLocation, 4);
   const ids = new Set(places.map((p) => p.id));
   if ([...ids].some((id) => SAFE_NIGHT_LOCATIONS.has(id))) {
     const onlySafe = [...ids].every((id) => SAFE_NIGHT_LOCATIONS.has(id));
@@ -131,7 +146,7 @@ function inferRiskyMovement(text, periodId) {
   return null;
 }
 
-export function inferNaturalCommand(text, { periodId = "morning", currentTimeLabel = "" } = {}) {
+export function inferNaturalCommand(text, { periodId = "morning", currentTimeLabel = "", currentLocation = "" } = {}) {
   const raw = compact(text);
   if (!raw || parseActionCommand(raw)) return null;
   const key = labelSortKey(currentTimeLabel);
@@ -150,35 +165,35 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
     return { command: "考试", action: ACTIONS.考试, target: "", inferred: true };
   }
 
-  const riskyMovement = inferRiskyMovement(text, periodId);
+  const riskyMovement = inferRiskyMovement(text, periodId, currentLocation);
   if (riskyMovement) {
     return { command: "夜游", action: ACTIONS.夜游, target: riskyMovement, inferred: true };
   }
 
   if (has(raw, ["熬魔药", "调魔药", "配魔药", "搅拌坩埚", "处理坩埚", "切药材", "称量药材", "加入药材"])) {
-    return withLocationGate("魔药", ACTIONS.魔药, targetAfter(raw, /(?:熬|调|配)(.{1,12}?)(?:魔药|药剂)/), text);
+    return withLocationGate("魔药", ACTIONS.魔药, targetAfter(raw, /(?:熬|调|配)(.{1,12}?)(?:魔药|药剂)/), text, currentLocation);
   }
 
   if (has(raw, ["变形术", "变成", "变出来", "把", "火柴变针"])) {
     if (has(raw, ["变形术", "变成", "变出来", "火柴变针"])) {
-      return withLocationGate("变形", ACTIONS.变形, targetAfter(raw, /把(.{1,16}?)(?:变成|变为)/), text);
+      return withLocationGate("变形", ACTIONS.变形, targetAfter(raw, /把(.{1,16}?)(?:变成|变为)/), text, currentLocation);
     }
   }
 
   if (has(raw, ["曼德拉草", "照料植物", "处理植物", "给植物", "修剪植物", "移栽", "换盆", "采摘草药"])) {
-    return withLocationGate("草药", ACTIONS.草药, "草药课堂/植物照料", text);
+    return withLocationGate("草药", ACTIONS.草药, "草药课堂/植物照料", text, currentLocation);
   }
 
   if (has(raw, ["缴械", "除你武器", "盔甲护身", "抵挡咒语", "练防御", "防御术练习", "黑魔法防御练习"])) {
-    return withLocationGate("防御", ACTIONS.防御, "防御术练习", text);
+    return withLocationGate("防御", ACTIONS.防御, "防御术练习", text, currentLocation);
   }
 
   if (has(raw, ["骑扫帚", "骑上扫帚", "跨上扫帚", "飞上", "飞起来", "飞行训练", "魁地奇训练", "魁地奇选拔", "参加选拔"])) {
-    return withLocationGate("飞行", ACTIONS.飞行, "扫帚/魁地奇", text);
+    return withLocationGate("飞行", ACTIONS.飞行, "扫帚/魁地奇", text, currentLocation);
   }
 
   if (has(raw, ["练习咒", "练咒", "施咒", "念咒", "挥杖", "漂浮咒", "荧光闪烁", "阿拉霍洞开", "修复如初"])) {
-    return withLocationGate("练咒", ACTIONS.练咒, targetAfter(raw, /(漂浮咒|荧光闪烁|阿拉霍洞开|修复如初|除你武器)/) || "咒语练习", text);
+    return withLocationGate("练咒", ACTIONS.练咒, targetAfter(raw, /(漂浮咒|荧光闪烁|阿拉霍洞开|修复如初|除你武器)/) || "咒语练习", text, currentLocation);
   }
 
   // 课堂表现：必须是「真的去上课 / 课堂场景」才触发，而不是随口提到某门课的名字。
@@ -188,7 +203,7 @@ export function inferNaturalCommand(text, { periodId = "morning", currentTimeLab
     /上(?:魔咒|魔药|变形术|草药学?|黑魔法防御术|防御术|魔法史|飞行|天文学?|占卜学?|算术占卜|保护神奇生物|古代如尼文|麻瓜研究)课/.test(raw) ||
     has(raw, ["按课表上课", "去上课", "上课", "课堂表现", "回答问题", "举手回答", "被点名", "课堂展示", "课堂示范", "随堂测验", "随堂小测"]);
   if (attendsClass && !beforeTerm) { // 开学前没有课堂，不触发课堂检定
-    return withLocationGate("课堂", ACTIONS.课堂, "课堂表现", text);
+    return withLocationGate("课堂", ACTIONS.课堂, "课堂表现", text, currentLocation);
   }
 
   if (has(raw, ["推开", "挡住", "争执", "吵起来", "冲突", "对峙", "抢回", "保护"])) {
