@@ -192,9 +192,15 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error("
 
   const bad = parseClueTags("【线索：类型=日常小支线；标题=古老神器的预言；阶段=初见；进展=一个未知组织似乎影响魔法界命运；期限=3】");
   ok(bad.entries.length === 0, "large invented mystery is rejected");
+  const explicitLarge = parseClueTags("【线索：类型=角色关系；标题=血脉钥匙；规模=大；阶段=怀疑；人物=室友；进展=这似乎会改写原著；期限=3】");
+  ok(explicitLarge.entries.length === 0, "explicit large relationship mystery is rejected");
+  const chamber = parseClueTags("【线索：类型=原著回声；标题=墙上的血字；原著关联=密室/蛇怪；阶段=怀疑；人物=金妮；进展=走廊墙上的血字引发恐慌；期限=3】");
+  ok(chamber.entries.length === 1 && chamber.entries[0].type === "canon", "later-year canon anchor is accepted");
+  const fakeCanon = parseClueTags("【线索：类型=原著回声；标题=魔法石背后的新组织；原著关联=魔法石/未知组织；阶段=怀疑；进展=一个未知组织声称控制魔法石；期限=3】");
+  ok(fakeCanon.entries.length === 0, "canon anchor cannot launder invented mystery");
 
-  const merged = mergeClues([], [...canon.entries, ...daily.entries]);
-  ok(activeClues(merged.clues).length === 2, "merged clues remain active");
+  const merged = mergeClues([], [...canon.entries, ...daily.entries, ...chamber.entries]);
+  ok(activeClues(merged.clues).length === 3, "merged clues remain active");
   ok(formatCluesBlock(merged.clues).includes("不可扩成新世界观谜团"), "clue prompt includes anti-mystery guard");
   ok(formatClueLine(merged.applied).includes("线索更新"), "clue roll line formats");
 }

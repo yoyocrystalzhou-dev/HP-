@@ -194,6 +194,12 @@ const player = createPlayerCharacter({
   ok(activeClues(merged.clues).length === 1, "daily clue becomes active");
   const bad = parseClueTags("【线索：类型=日常小支线；标题=远古预言；阶段=初见；进展=一个未知组织影响魔法界命运；期限=3】");
   ok(bad.entries.length === 0, "world-scale invented mystery is rejected");
+  const bigScale = parseClueTags("【线索：类型=日常小支线；标题=寝室暗号；规模=大；阶段=初见；人物=室友；进展=暗号似乎牵连整个魔法界；期限=3】");
+  ok(bigScale.entries.length === 0, "large-scale side mystery is rejected instead of downgraded");
+  const canon = parseClueTags("【线索：类型=原著回声；标题=墙上的血字；原著关联=密室/蛇怪；阶段=怀疑；人物=金妮；进展=走廊墙上的血字引发恐慌；期限=3】");
+  ok(canon.entries.length === 1 && canon.entries[0].type === "canon", "later-year canon anchor can be accepted");
+  const contaminated = parseClueTags("【线索：类型=原著回声；标题=魔法石背后的新组织；原著关联=魔法石/未知组织；阶段=怀疑；进展=一个未知组织声称控制魔法石；期限=3】");
+  ok(contaminated.entries.length === 0, "canon clue cannot mix in invented world mystery");
 }
 
 // 10. Exams and House Cup are idempotent and canon-locked where needed.
