@@ -1459,10 +1459,15 @@ ${transcriptLines(chunk)}`;
         const tgt = findCharacter(cmd.target, activeProject?.characters, activeProject?.ocs);
         if (tgt) {
           const fav = player.favor?.[tgt.id] || 0;
-          const ok = fav >= 60;
-          rollLine = [rollLine, `💗 向 ${tgt.name} 告白 —— 好感度 ${fav}（${favorStage(fav)}）→ ${ok ? "接受 ❤" : "被婉拒"}`].filter(Boolean).join("  ·  ");
+          const romanceBlocked = tgt.kind === "oc" && tgt.romanceable === false;
+          const ok = !romanceBlocked && fav >= 60;
+          rollLine = [rollLine, `💗 向 ${tgt.name} 告白 —— 好感度 ${fav}（${favorStage(fav)}）→ ${ok ? "接受 ❤" : romanceBlocked ? "不进入恋爱线" : "被婉拒"}`].filter(Boolean).join("  ·  ");
           actionAnchor = `【告白结果（旁白必须据此叙事，不得改判）】玩家向 ${tgt.name} 告白，当前好感度 ${fav}。` +
-            (ok ? "已达恋人阈值（≥60），对方接受，二人正式成为恋人。" : "未达恋人阈值（<60），对方婉拒或回避，但不必撕破脸。") +
+            (romanceBlocked
+              ? "该原创角色被设定为不可攻略 / 不进入恋爱线；对方应温和或明确地把关系停留在非恋爱层面。"
+              : ok
+              ? "已达恋人阈值（≥60），对方接受，二人正式成为恋人。"
+              : "未达恋人阈值（<60），对方婉拒或回避，但不必撕破脸。") +
             "请自然演绎这一刻。";
           if (ok) {
             patchProject((p) => {

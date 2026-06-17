@@ -49,8 +49,8 @@ export function findCharacter(name, characters = [], ocs = []) {
   const q = String(name || "").trim();
   if (!q) return null;
   const all = [
-    ...(characters || []).map((c) => ({ id: c.id, name: c.name, kind: "canon" })),
-    ...(ocs || []).map((o) => ({ id: o.id, name: o.name, kind: "oc" })),
+    ...(characters || []).map((c) => ({ ...c, kind: "canon" })),
+    ...(ocs || []).map((o) => ({ ...o, kind: "oc", romanceable: o.romanceable !== false })),
   ];
   return (
     all.find((c) => c.name === q) ||
@@ -104,6 +104,22 @@ export function socialAnchor(targetName, newFavor) {
 
 const REL_LIMIT = 3;
 
+function mergeRelationshipEntries(entries = []) {
+  const byId = new Map();
+  for (const entry of entries || []) {
+    if (!entry?.id || !Number.isFinite(Number(entry.delta))) continue;
+    const prev = byId.get(entry.id) || { ...entry, delta: 0, note: "" };
+    const notes = [prev.note, entry.note].filter(Boolean);
+    byId.set(entry.id, {
+      ...prev,
+      ...entry,
+      delta: Math.max(-REL_LIMIT, Math.min(REL_LIMIT, Number(prev.delta || 0) + Number(entry.delta || 0))),
+      note: [...new Set(notes)].join("；"),
+    });
+  }
+  return [...byId.values()];
+}
+
 /** AI 只能建议日常关系小幅变化，系统解析、限幅并清洗标签。 */
 export function parseRelationshipDeltas(text, characters = [], ocs = []) {
   const raw = String(text || "");
@@ -111,7 +127,7 @@ export function parseRelationshipDeltas(text, characters = [], ocs = []) {
   const cleaned = raw.replace(/【关系变化[:：]([^】]+)】/g, (_, body) => {
     const parts = String(body || "").split(/[；;、，,\n]+/);
     for (const part of parts) {
-      const m = part.trim().match(/^(.{1,18}?)([+-＋－])\s*(\d{1,2})(?:\s*[:：]\s*(.{1,40}))?$/);
+      const m = part.trim().match(/^(.{1,36}?)([+-＋－])\s*(\d{1,2})(?:\s*[:：]\s*(.{1,48}))?$/);
       if (!m) continue;
       const target = findCharacter(m[1].trim(), characters, ocs);
       if (!target) continue;
@@ -122,7 +138,7 @@ export function parseRelationshipDeltas(text, characters = [], ocs = []) {
     return "";
   }).replace(/\n{3,}/g, "\n\n").trim();
 
-  return { cleaned, entries };
+  return { cleaned, entries: mergeRelationshipEntries(entries) };
 }
 
 function relationshipEvent(entry, value, stage, context = {}) {
@@ -152,7 +168,7 @@ export function applyRelationshipDeltas(player, entries = [], context = {}) {
   };
   const applied = [];
 
-  for (const entry of entries) {
+  for (const entry of mergeRelationshipEntries(entries)) {
     const oldValue = Number(next.favor[entry.id] || 0);
     const value = Math.max(0, Math.min(FAVOR_MAX, oldValue + entry.delta));
     next.favor[entry.id] = value;
@@ -320,5 +336,5 @@ export function filterRelationshipDeltasByEvidence(entries = [], userText, chara
     maxEntries: 6,
   });
   const allowed = new Set(evidence.map((entry) => entry.id));
-  return entries.filter((entry) => allowed.has(entry.id) && (!hasPresenceLock || present.has(entry.id)));
+  return mergeRelationshipEntries(entries).filter((entry) => allowed.has(entry.id) && (!hasPresenceLock || present.has(entry.id)));
 }

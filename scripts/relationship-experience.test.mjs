@@ -2,9 +2,12 @@ import {
   RELATIONSHIP_EVENT_LIMIT,
   applyRelationshipDeltas,
   favorStage,
+  findCharacter,
   formatFavorBlock,
+  parseRelationshipDeltas,
   relationshipGate,
 } from "../src/lib/affinity.js";
+import { createOC, formatOcs } from "../src/lib/oc.js";
 
 let pass = 0;
 let fail = 0;
@@ -22,6 +25,11 @@ const player = {
   favor: {},
   state: { status: "", relationships: {} },
 };
+
+const cast = [
+  { id: "harry", name: "哈利・詹姆斯・波特", kind: "canon" },
+  { id: "albus", name: "阿不思・珀西瓦尔・伍尔弗里克・布赖恩・邓布利多", kind: "canon" },
+];
 
 {
   const result = applyRelationshipDeltas(player, [
@@ -98,6 +106,29 @@ const player = {
   }).player;
   ok(checked.state.relationships.ron.events.length === 1, "zero-delta social checks still leave an interaction record");
   ok(!checked.state.relationships.ron.feeling, "check tier text does not overwrite relationship feeling");
+}
+
+{
+  const parsed = parseRelationshipDeltas("【关系变化：阿不思・珀西瓦尔・伍尔弗里克・布赖恩・邓布利多+1】", cast, []);
+  ok(parsed.entries.length === 1 && parsed.entries[0].id === "albus", "long canonical full names parse in relationship tags");
+}
+
+{
+  const parsed = parseRelationshipDeltas("【关系变化：哈利+2；哈利+2：共同冒险】", cast, []);
+  ok(parsed.entries.length === 1 && parsed.entries[0].id === "harry" && parsed.entries[0].delta === 3, "duplicate relationship tags are merged and clamped");
+  const result = applyRelationshipDeltas(player, [
+    { id: "harry", name: "哈利・詹姆斯・波特", kind: "canon", delta: 2, note: "一次互动" },
+    { id: "harry", name: "哈利・詹姆斯・波特", kind: "canon", delta: 2, note: "重复标签" },
+  ], { scene: "同一轮共同冒险。" });
+  ok(result.player.favor.harry === 3 && result.player.state.relationships.harry.events.length === 1, "applyRelationshipDeltas also merges duplicate entries defensively");
+}
+
+{
+  const oc = createOC({ id: "oc-mira", name: "米拉", romanceable: false, persona: "安静的新生" });
+  const found = findCharacter("米拉", [], [oc]);
+  const block = formatOcs([oc]);
+  ok(found?.kind === "oc" && found.romanceable === false, "findCharacter preserves non-romanceable OC metadata");
+  ok(block.includes("可积累好感") && !block.includes("可攻略/可进入结局素材"), "non-romanceable OC prompt does not advertise romance route");
 }
 
 console.log(`\nRelationship experience tests: ${pass} passed, ${fail} failed`);
