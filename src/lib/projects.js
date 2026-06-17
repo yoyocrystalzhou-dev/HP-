@@ -47,7 +47,7 @@ import { uid } from "./utils.js";
 import { store } from "./storage.js";
 import { createInitialInventory, normalizeInventory } from "./inventory.js";
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 /** The player character's fixed id (the user's own avatar in the world). */
 export const PLAYER_ID = "player";
@@ -257,6 +257,7 @@ export function createProject(partial = {}) {
     storyMemory: partial.storyMemory || [],
     ocs: partial.ocs || [], // HP 专项：玩家自创原创角色（与锁定的 canon 角色分开）
     clues: partial.clues || [], // HP 专项：受限线索 / 小支线，不等同于世界观事实
+    lifeLog: Array.isArray(partial.lifeLog) ? partial.lifeLog : [], // HP 专项：程序记录的生活片段账本
     houseCupResults: partial.houseCupResults || {}, // HP 专项：学年学院杯结算，按 "1991-1992" 存储
     characters,
     playerCharacter: partial.playerCharacter ? createPlayerCharacter(partial.playerCharacter) : createPlayerCharacter(),
@@ -534,7 +535,7 @@ export function migrateAll(projects, sessions) {
     // Already has the v2 chat structure → only patch newly-added fields (e.g.
     // playerCharacter). Never recreate WorldChats / regroup character chats here.
     if (Array.isArray(proj.worldChatIds)) {
-      if (proj.playerCharacter && Array.isArray(proj.pendingUpdates) && typeof proj.currentTimeLabel === "string" && "currentState" in proj && Array.isArray(proj.files) && proj.houseCupResults && proj.schemaVersion >= SCHEMA_VERSION) {
+      if (proj.playerCharacter && Array.isArray(proj.pendingUpdates) && typeof proj.currentTimeLabel === "string" && "currentState" in proj && Array.isArray(proj.files) && Array.isArray(proj.lifeLog) && proj.houseCupResults && proj.schemaVersion >= SCHEMA_VERSION) {
         newProjects[pid] = proj;
         continue;
       }
@@ -548,6 +549,7 @@ export function migrateAll(projects, sessions) {
         currentState: createCurrentState(migratedProj.currentState),
         files: normalizeFiles(migratedProj.files),
         clues: Array.isArray(migratedProj.clues) ? migratedProj.clues : [],
+        lifeLog: Array.isArray(migratedProj.lifeLog) ? migratedProj.lifeLog : [],
         houseCupResults: migratedProj.houseCupResults || {},
         schemaVersion: SCHEMA_VERSION,
         updatedAt: Date.now(),
@@ -597,6 +599,7 @@ export function migrateAll(projects, sessions) {
       worldMemory,
       storyMemory,
       clues: Array.isArray(proj.clues) ? proj.clues : [],
+      lifeLog: Array.isArray(proj.lifeLog) ? proj.lifeLog : [],
       houseCupResults: proj.houseCupResults || {},
       characters,
       playerCharacter: proj.playerCharacter ? createPlayerCharacter(proj.playerCharacter) : createPlayerCharacter(),

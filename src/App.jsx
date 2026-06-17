@@ -52,6 +52,7 @@ import { INVENTORY_RULES, applyInventoryChanges, formatInventoryBlock, inferShop
 import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, parseClueTags } from "./lib/clues.js";
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import { AMBIGUOUS_ATMOSPHERE_STYLE } from "./lib/writingStyle.js";
+import { applyLifeLogUpdate, createLifeLogEntry, formatLifeLogBlock } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -832,6 +833,12 @@ export default function App() {
     if (csFmt.stateLines.length) parts.push(`【当前剧情状态】\n${csFmt.stateLines.join("\n")}`);
     if (csFmt.forbidden.length)
       parts.push(`【严格约束（不得违反）】\n- 只能基于上述【当前剧情状态】推进，不得编造状态之外的剧情进展。\n- 禁止假设：\n  - ${csFmt.forbidden.join("\n  - ")}`);
+    const lifeLogNameMap = {
+      ...nameMap,
+      ...Object.fromEntries((activeProject?.ocs || []).map((o) => [o.id, o])),
+    };
+    const lifeLogBlock = formatLifeLogBlock(activeProject?.lifeLog, { nameMap: lifeLogNameMap, limit: 8 });
+    if (lifeLogBlock) parts.push(lifeLogBlock);
 
     const facts = formatFacts(worldMemory);
     if (facts.length) parts.push(`【世界客观事实】\n- ${facts.join("\n- ")}`);
@@ -1196,6 +1203,7 @@ ${transcriptLines(chunk)}`;
       const dailyGrowthLine = formatDailyGrowth(daily.entries);
       let relationshipLine = "";
       let clueLine = "";
+      let appliedRelationship = [];
 
       if (daily.entries.length) {
         patchProject((p) => {
@@ -1225,6 +1233,7 @@ ${transcriptLines(chunk)}`;
       }
       if (relEntries.length) {
         const appliedPreview = applyRelationshipDeltas(player, relEntries).applied;
+        appliedRelationship = appliedPreview;
         patchProject((p) => {
           const pc = p.playerCharacter || {};
           const result = applyRelationshipDeltas(pc, relEntries);
@@ -1238,6 +1247,25 @@ ${transcriptLines(chunk)}`;
         clueLine = formatClueLine(preview.applied);
       }
       const rollLine = [dailyGrowthLine, relationshipLine, clueLine].filter(Boolean).join("   ");
+      if (HP_KIOSK && activeMode === "world") {
+        const lifeMeta = lastUserForMechanics.lifeMeta || {};
+        const lifeEntry = createLifeLogEntry({
+          project: activeProject,
+          periodId: scenePeriodId,
+          periodLabel: scenePeriod.label,
+          userText: lastUserForMechanics.display || "",
+          aiText: visibleText,
+          characters: projectChars,
+          ocs: activeProject?.ocs || [],
+          relationshipApplied: appliedRelationship,
+          dailyGrowth: [...(lifeMeta.growthEntries || []), ...daily.entries],
+          clueEntries: clueParse.entries,
+          inventoryChanges: lifeMeta.inventoryChanges || [],
+          rollLine: [lastUserForMechanics.roll, rollLine].filter(Boolean).join("   "),
+          sourceChatId: sid,
+        });
+        patchProject((p) => applyLifeLogUpdate(p, lifeEntry));
+      }
 
       setSessions((prev) => {
         const s = prev[sid];
@@ -1518,6 +1546,11 @@ ${transcriptLines(chunk)}`;
       kind: messageKind,
       mechanicCommand: cmd ? { command: cmd.command, inferred: !!cmd.inferred } : null,
       advancePeriod: advancePeriodAfterReply,
+      lifeMeta: {
+        inventoryChanges: shoppingChanges,
+        growthEntries,
+        command: cmd?.command || "",
+      },
       roll: rollLine || null, // 检定/状态变化，渲染为独立居中状态条（不进气泡、不发给 AI）
       attachments: curAtts.map((a) => ({ name: a.name })),
     };
