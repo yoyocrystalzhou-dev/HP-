@@ -22,9 +22,26 @@ import { ROSTER, ROSTER_NAMES } from "./roster.js";
 
 // 人物卡：名册锚定解析 → 合并 roster 元数据（学院 / 身份）
 const metaByName = new Map(ROSTER.map((r) => [r.name, r]));
-const characters = parsePersona(personaRaw, ROSTER_NAMES).map((c) => {
+const parsedCharacters = parsePersona(personaRaw, ROSTER_NAMES).map((c) => {
   const meta = metaByName.get(c.name) || {};
   return { ...c, house: meta.house || "", role: meta.role || "student" };
+});
+const parsedByName = new Map(parsedCharacters.map((c) => [c.name, c]));
+const fallbackPersona = (meta) => [
+  `基础信息：${meta.name}，${meta.house ? `${meta.house}学院，` : ""}${meta.role || "student"}。`,
+  meta.persona ? `人物定位：${meta.persona}` : "",
+  "使用规则：遵循原著时间线与身份边界；若当前年份尚未到其高频出场阶段，只能作为背景、传闻、书信或短暂相遇出现，不得提前推进后期重大事件。",
+].filter(Boolean).join("\n");
+const characters = ROSTER.map((meta) => {
+  const parsed = parsedByName.get(meta.name);
+  if (parsed) return { ...parsed, house: meta.house || parsed.house || "", role: meta.role || parsed.role || "student" };
+  return {
+    name: meta.name,
+    persona: fallbackPersona(meta),
+    avatar: "🪄",
+    house: meta.house || "",
+    role: meta.role || "student",
+  };
 });
 
 /**

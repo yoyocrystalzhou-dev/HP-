@@ -150,6 +150,8 @@ export function createCharacter(partial = {}) {
     avatar: partial.avatar || "🧙",
     persona: partial.persona || "",
     greeting: partial.greeting || "你好！有什么我可以帮助你的？",
+    house: partial.house || "",
+    role: partial.role || "",
     state: partial.state ? createCharacterState(partial.state) : createCharacterState(),
     history,
     chatIds: partial.chatIds || [],

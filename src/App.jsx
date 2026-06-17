@@ -593,6 +593,38 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, activeProjectId, activeMode, activeProject?.activeCharId, activeProject?.worldChatIds?.length, scopeChar?.chatIds?.length]);
 
+  // HP 专项：内置原著名册会随版本扩充；已有存档只追加缺失角色，不覆盖已有状态/聊天。
+  useEffect(() => {
+    if (!ready || !activeProject || !activePreset?.characters?.length) return;
+    const canonByName = new Map(activePreset.characters.map((c) => [c.name, c]));
+    const existingNames = new Set((activeProject.characters || []).map((c) => c.name));
+    const missing = activePreset.characters.filter((c) => !existingNames.has(c.name));
+    const needsMetaPatch = (activeProject.characters || []).some((c) => {
+      const canon = canonByName.get(c.name);
+      return canon && ((!c.house && canon.house) || (!c.role && canon.role));
+    });
+    if (!missing.length && !needsMetaPatch) return;
+    patchProject((p) => {
+      const nextChars = (p.characters || []).map((c) => {
+        const canon = canonByName.get(c.name);
+        if (!canon) return c;
+        return {
+          ...c,
+          house: c.house || canon.house || "",
+          role: c.role || canon.role || "",
+        };
+      });
+      return {
+        ...p,
+        characters: [
+          ...nextChars,
+          ...missing.map((c) => createCharacter(c)),
+        ],
+      };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, activeProjectId, activePreset?.characters?.length, activeProject?.characters?.length]);
+
   // ── Mode / scope switching ──
   const switchToWorld = () => { patchProject((p) => ({ ...p, activeMode: "world" })); setPanel(null); };
   const handleCharSelect = (id) => {
