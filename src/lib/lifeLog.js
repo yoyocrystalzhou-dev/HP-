@@ -150,6 +150,7 @@ export function createLifeLogEntry({
   inventoryChanges = [],
   rollLine = "",
   sourceChatId = null,
+  sourceMessageId = null,
 } = {}) {
   const combined = [userText, aiText].filter(Boolean).join("\n");
   const location = detectLifeLocation(combined, project.currentState?.location || "");
@@ -183,6 +184,7 @@ export function createLifeLogEntry({
     inventoryChanges: (inventoryChanges || []).map((entry) => ({ id: entry.id, label: entry.label, source: entry.source })),
     rollLine: cleanText(rollLine, 220),
     sourceChatId,
+    sourceMessageId,
     createdAt: Date.now(),
   };
 }
@@ -208,6 +210,31 @@ export function applyLifeLogUpdate(project, entry) {
       location: entry.location || project.currentState?.location || "",
       scene: entry.scene || project.currentState?.scene || "",
       presentCharacters: (entry.presentCharacterIds || []).map((ref) => ({ ref })),
+      recentEvents,
+      updatedAt: Date.now(),
+    },
+  };
+}
+
+export function removeLifeLogEntriesByMessageIds(project, messageIds = []) {
+  const ids = new Set((messageIds || []).filter(Boolean));
+  if (!ids.size) return project;
+  const previous = normalizeLifeLog(project.lifeLog);
+  const kept = previous.filter((entry) => !entry.sourceMessageId || !ids.has(entry.sourceMessageId));
+  if (kept.length === previous.length) return project;
+  const latest = kept[0] || null;
+  const recentEvents = kept
+    .map((entry) => ({ content: entry.scene }))
+    .filter((item, index, arr) => item.content && arr.findIndex((x) => x.content === item.content) === index)
+    .slice(0, 6);
+  return {
+    ...project,
+    lifeLog: kept,
+    currentState: {
+      ...(project.currentState || {}),
+      location: latest?.location || project.currentState?.location || "",
+      scene: latest?.scene || project.currentState?.scene || "",
+      presentCharacters: latest ? (latest.presentCharacterIds || []).map((ref) => ({ ref })) : [],
       recentEvents,
       updatedAt: Date.now(),
     },

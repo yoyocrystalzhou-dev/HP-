@@ -54,7 +54,8 @@ import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, 
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import { AMBIGUOUS_ATMOSPHERE_STYLE, HP_NARRATION_GUARD } from "./lib/writingStyle.js";
 import { stripHiddenSystemResidue } from "./lib/hiddenTags.js";
-import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, detectLifeLocation, formatLifeLogBlock } from "./lib/lifeLog.js";
+import { currentStateForNarration, lifeLogForNarration, playerForNarration, preSortingHouseGuard } from "./lib/playerKnowledge.js";
+import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, detectLifeLocation, formatLifeLogBlock, removeLifeLogEntriesByMessageIds } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
 import OcCreator        from "./components/OcCreator.jsx";
 import { BackgroundOrnaments, DAY_BG, FoilTitle, NIGHT_BG, Starfield } from "./components/hpAtmosphere.jsx";
@@ -839,12 +840,25 @@ export default function App() {
     if (triggered.length)
       parts.push(`【世界书】\n${triggered.map((e) => `[${e.title}]\n${e.content}`).join("\n\n")}`);
 
+    const narrationContext = {
+      currentTimeLabel: activeProject?.currentTimeLabel,
+      periodId: scenePeriodId,
+      currentState: activeProject?.currentState,
+    };
+    const narrationCurrentState = currentStateForNarration(activeProject?.currentState, player, narrationContext);
+    const narrationLifeLog = lifeLogForNarration(activeProject?.lifeLog, player, {
+      ...narrationContext,
+      currentState: narrationCurrentState,
+    });
     // Phase 5: current-state snapshot. CharacterChat sees only the visible subset.
-    const csVisible = visibleCurrentState(activeProject?.currentState, {
+    const csVisible = visibleCurrentState(narrationCurrentState, {
       mode: activeMode,
       charId: activeMode === "character" ? activeChar?.id : null,
     });
     const csFmt = formatCurrentState(csVisible, { nameMap });
+    const narrationPlayer = playerForNarration(player, narrationContext);
+    const sortingGuard = preSortingHouseGuard(player, narrationContext);
+    if (sortingGuard) parts.push(sortingGuard);
     if (activeProject?.currentTimeLabel?.trim()) parts.push(`【当前时间】\n${activeProject.currentTimeLabel.trim()}`);
     if (HP_KIOSK && activeMode === "world") {
       const scheduleBlock = formatScheduleContextBlock(currentScheduleContext);
@@ -853,22 +867,22 @@ export default function App() {
         userText,
         period: scenePeriod,
         currentTimeLabel: activeProject?.currentTimeLabel,
-        currentState: activeProject?.currentState,
+        currentState: narrationCurrentState,
         storyMemory,
         worldMemory,
-        lifeLog: activeProject?.lifeLog,
+        lifeLog: narrationLifeLog,
         characters: projectChars,
         ocs: activeProject?.ocs,
-        player,
+        player: narrationPlayer,
       }));
       const presenceBlock = buildPresenceContext({
         userText,
         period: scenePeriod,
-        currentState: activeProject?.currentState,
-        lifeLog: activeProject?.lifeLog,
+        currentState: narrationCurrentState,
+        lifeLog: narrationLifeLog,
         characters: projectChars,
         ocs: activeProject?.ocs,
-        player,
+        player: narrationPlayer,
       });
       if (presenceBlock) parts.push(presenceBlock);
     }
@@ -881,7 +895,7 @@ export default function App() {
       ...nameMap,
       ...Object.fromEntries((activeProject?.ocs || []).map((o) => [o.id, o])),
     };
-    const lifeLogBlock = formatLifeLogBlock(activeProject?.lifeLog, { nameMap: lifeLogNameMap, limit: 8 });
+    const lifeLogBlock = formatLifeLogBlock(narrationLifeLog, { nameMap: lifeLogNameMap, limit: 8 });
     if (lifeLogBlock) parts.push(lifeLogBlock);
 
     const facts = formatFacts(worldMemory);
@@ -916,7 +930,7 @@ export default function App() {
       // HP 专项：注入玩家数值 + 数值/好感度门槛裁决规则（防止自由叙述空口越过数值门槛）
       if (player.stats) {
         parts.push(formatStatsLine(player.stats));
-        parts.push(formatHouseCupBlock(player, activeProject?.currentTimeLabel, activeProject?.houseCupResults));
+        parts.push(formatHouseCupBlock(narrationPlayer, activeProject?.currentTimeLabel, activeProject?.houseCupResults));
         parts.push(formatCoursesBlock(player.courses));
         parts.push(formatInventoryBlock(player.inventory));
         parts.push(GATING_RULES);
@@ -928,7 +942,7 @@ export default function App() {
       parts.push(CLUE_RULES);
       // Player character — the user's own role in the world.
       const pseg = [`【玩家角色（用户扮演）：${player.name}】`];
-      if (player.persona?.trim()) pseg.push(player.persona.trim());
+      if (narrationPlayer.persona?.trim()) pseg.push(narrationPlayer.persona.trim());
       const pst = formatState(player.state, nameMap);
       if (pst.length) pseg.push(`(状态) ${pst.join("；")}`);
       parts.push(pseg.join("\n"));
@@ -1332,6 +1346,7 @@ ${transcriptLines(chunk)}`;
           inventoryChanges: lifeMeta.inventoryChanges || [],
           rollLine: [lastUserForMechanics.roll, rollLine].filter(Boolean).join("   "),
           sourceChatId: sid,
+          sourceMessageId: aid,
         });
         patchProject((p) => applyLifeLogUpdate(p, lifeEntry));
       }
@@ -1690,9 +1705,16 @@ ${transcriptLines(chunk)}`;
     patchSession((s) => ({ ...s, summary: "", summaryUntil: 0 }));
   };
 
+  const rollbackMessageSideEffects = (messageIds = []) => {
+    const ids = (messageIds || []).filter(Boolean);
+    if (!ids.length) return;
+    patchProject((p) => removeLifeLogEntriesByMessageIds(p, ids));
+  };
+
   const deleteMessage = (messageId) => {
     const index = messages.findIndex((message, i) => (message.id || `idx-${i}`) === messageId);
     if (index >= 0) clearSummaryIfAffected(index);
+    rollbackMessageSideEffects([messageId]);
     setMessages((prev) => prev.filter((message, index) => (message.id || `idx-${index}`) !== messageId));
     if (editingMsgId === messageId) {
       setEditingMsgId(null);
@@ -1725,6 +1747,8 @@ ${transcriptLines(chunk)}`;
 
     clearSummaryIfAffected(userIndex);
     const baseMessages = messages.slice(0, userIndex + 1).map((message) => ({ ...message, streaming: false }));
+    const removedMessageIds = messages.slice(userIndex + 1).map((message) => message.id).filter(Boolean);
+    rollbackMessageSideEffects(removedMessageIds);
     setMessages(baseMessages);
     const regenPrompt = typeof baseMessages[userIndex].content === "string"
       ? baseMessages[userIndex].content

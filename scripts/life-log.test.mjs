@@ -5,6 +5,7 @@ import {
   detectCharacterRefs,
   detectLifeLocation,
   formatLifeLogBlock,
+  removeLifeLogEntriesByMessageIds,
 } from "../src/lib/lifeLog.js";
 
 let pass = 0;
@@ -61,6 +62,7 @@ const cast = [
     inventoryChanges: [{ id: "wizard_money", label: "巫师货币", source: "古灵阁" }],
     rollLine: "获得物品：巫师货币",
     sourceChatId: "chat-1",
+    sourceMessageId: "assistant-1",
   });
   ok(entry.location === "古灵阁", "life log stores detected location");
   ok(entry.presentCharacterIds.includes("harry") && entry.presentCharacterIds.includes("hagrid"), "life log stores present people");
@@ -76,6 +78,10 @@ const cast = [
   const block = formatLifeLogBlock(updated.lifeLog, { nameMap: Object.fromEntries(cast.map((c) => [c.id, c])) });
   ok(block.includes("近期生活日志") && block.includes("古灵阁") && block.includes("在场：哈利"), "life log prompt block renders continuity");
   ok(block.includes("这是已经发生的过去") && block.includes("不得把过去店铺的人物、商品或道具自动搬到新地点"), "life log block isolates past scenes from current scene");
+
+  const rolledBack = removeLifeLogEntriesByMessageIds(updated, ["assistant-1"]);
+  ok(rolledBack.lifeLog.length === 0, "regeneration rollback removes life log entry tied to deleted assistant message");
+  ok(rolledBack.currentState.presentCharacters.length === 0, "regeneration rollback clears present characters from removed latest log");
 }
 
 {
