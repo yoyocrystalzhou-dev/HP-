@@ -58,7 +58,7 @@ const ok = (cond, msg) => {
   ok(app.includes("playerForNarration") && app.includes("preSortingHouseGuard"), "App redacts pre-sorting player house from narration prompt");
   ok(app.includes("removeLifeLogEntriesByMessageIds") && app.includes("sourceMessageId: aid"), "App can roll back life-log side effects when regenerating assistant replies");
   ok(app.includes("NPC 反应与当前行动的即时后果") && !app.includes("推进剧情，并"), "App base narrator prompt avoids autopilot plot advancement");
-  ok(app.includes("描述你的行动 / 回应场景") && !app.includes("描述你的行动 / 推进剧情"), "Player input placeholder frames roleplay as responding instead of autopilot progression");
+  ok(app.includes("bookInputPlaceholder") && !app.includes("描述你的行动 / 推进剧情"), "Player input placeholder uses action-note language instead of autopilot progression");
   ok(preset.includes("文风只负责氛围与质感") && preset.includes("写到玩家需要回应或行动的位置就停下"), "Preset writing rules preserve player agency");
   ok(app.includes("stripHiddenSystemResidue("), "App cleans final visible text after parsing backend tags");
   ok(app.includes("const visibleChunk = stripHiddenSystemResidue(chunk)") && app.includes("content: visibleChunk"), "App cleans streaming chunks before display");

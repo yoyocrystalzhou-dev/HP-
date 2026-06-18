@@ -43,7 +43,7 @@ import {
   parseRelationshipDeltas, applyRelationshipDeltas, formatRelationshipDeltaLine, relationshipRulesBlock, inferFavorDeltas, filterRelationshipDeltasByEvidence, RELATIONSHIP_EVENT_LIMIT,
 } from "./lib/affinity.js";
 import { LIFE_SCENE_RULES } from "./lib/lifeScenes.js";
-import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext } from "./lib/hogwartsLifeEngine.js";
+import { LIFE_SCENE_ENGINE_RULES, buildHogwartsLifeContext, buildCalendarLifeContext, formatLocationBrief, locationsForPeriod } from "./lib/hogwartsLifeEngine.js";
 import { buildPresenceContext } from "./lib/presence.js";
 import { dayPeriod, advanceCalendarClock, calendarMoment, buildCalendarChoiceInput, scheduleContext, formatScheduleContextBlock } from "./lib/schoolCalendar.js";
 import { timetableContext } from "./lib/timetable.js";
@@ -54,6 +54,7 @@ import { CLUE_RULES, clueSummary, formatClueLine, formatCluesBlock, mergeClues, 
 import { formatHouseCupBlock, formatHouseCupLine, houseCupAnchor, houseCupSummary, settleHouseCup } from "./lib/houseCup.js";
 import { AMBIGUOUS_ATMOSPHERE_STYLE, HP_NARRATION_GUARD } from "./lib/writingStyle.js";
 import { stripHiddenSystemResidue } from "./lib/hiddenTags.js";
+import { bookEntryFromMessage, bookHelperText, bookInputPlaceholder } from "./lib/bookMode.js";
 import { currentStateForNarration, lifeLogForNarration, playerForNarration, preSortingHouseGuard } from "./lib/playerKnowledge.js";
 import { applyLifeLogUpdate, createLifeLogEntry, detectCharacterRefs, detectLifeLocation, formatLifeLogBlock, removeLifeLogEntriesByMessageIds } from "./lib/lifeLog.js";
 import StatusBar        from "./components/StatusBar.jsx";
@@ -250,6 +251,9 @@ export default function App() {
   const currentCalendarMoment = currentScheduleContext?.moment || (HP_KIOSK && activeMode === "world"
     ? calendarMoment({ currentTimeLabel: activeProject?.currentTimeLabel, periodId: scenePeriodId })
     : null);
+  const stagePlaces = HP_KIOSK && activeMode === "world"
+    ? locationsForPeriod(scenePeriodId, isMobile ? 7 : 9)
+    : [];
   const nextClock = currentScheduleContext?.nextClock || (HP_KIOSK && activeProject
     ? advanceCalendarClock({ currentTimeLabel: activeProject.currentTimeLabel, periodId: scenePeriodId })
     : null);
@@ -413,6 +417,30 @@ export default function App() {
       disableActions: !(option.mechanic === "课堂" || ["参加考试", "直接休息", "夜游试探", "被发现风险"].includes(option.label)),
       // 日常活动选项不再自动消耗时段；时段推进交给「下一时段」按钮。带时间跳转的选项（快进/休息/换学年）在上面已直接改写时间。
       advancePeriod: option.advancePeriod ?? false,
+    });
+  };
+
+  const chooseStagePlace = async (place) => {
+    if (loading || !place) return;
+    if (!activeSessionId) return;
+    if (!config.apiKey) {
+      setStatus("⚠ 请先填写 API Key");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+    const hiddenText = [
+      `我前往${place.label}。`,
+      "【舞台入口规则】地点按钮只代表玩家移动舞台，不代表固定剧情、固定奖励、固定人物出现或固定好感变化。",
+      `【目标地点】${formatLocationBrief(place)}`,
+      "请结合当前日期、时段、地点风险、近期生活日志、在场人物概率、原著锚点和玩家状态，生成一次开放的生活片段；可以平静，可以擦肩，可以空转，也可以出现轻微事件，但不要把地点写成固定任务。"
+    ].join("\n\n");
+    await send({
+      text: place.label,
+      display: place.label,
+      hiddenText,
+      kind: "locationMove",
+      disableActions: true,
+      advancePeriod: false,
     });
   };
 
@@ -1785,6 +1813,8 @@ ${transcriptLines(chunk)}`;
       streaming: false,
     };
     const baseMessages = [...messages.slice(0, index), edited];
+    const removedMessageIds = messages.slice(index + 1).map((message) => message.id).filter(Boolean);
+    rollbackMessageSideEffects(removedMessageIds);
     setEditingMsgId(null);
     setEditDraft("");
     setMessages(baseMessages);
@@ -2269,7 +2299,7 @@ ${transcriptLines(chunk)}`;
           <div style={{ maxWidth: HP_KIOSK ? 650 : 900, width: "100%", margin: "0 auto", padding: HP_KIOSK ? (isMobile ? "18px 14px 22px" : "26px 20px 32px") : (isMobile ? "20px 10px 24px" : "34px 26px 38px") }}>
           {messages.length === 0 && HP_KIOSK && (
             <div style={{ textAlign: "center", margin: "30vh auto 0", maxWidth: 300, color: hpUi.emptyText, fontSize: 14, lineHeight: 1.7 }}>
-              {config.apiKey ? "在下方描述你的行动，开启 1991 学年。" : "先在右上角配置 API Key。"}
+              {config.apiKey ? "在下方写下第一段行动，开启这本霍格沃茨生活书。" : "先在右上角配置 API Key。"}
             </div>
           )}
           {messages.length === 0 && !HP_KIOSK && (
@@ -2284,7 +2314,8 @@ ${transcriptLines(chunk)}`;
             const msgId = m.id || `idx-${i}`;
             const displayText = m.display || m.content;
             const isEditing = editingMsgId === msgId;
-            if (m.kind === "calendarChoice") {
+            const bookEntry = HP_KIOSK ? bookEntryFromMessage(m, i) : null;
+            if (HP_KIOSK && bookEntry?.type === "bookmark") {
               return (
                 <Fragment key={msgId}>
                   <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 18px" : "0 0 22px", animation: "fadeUp 0.18s ease" }}>
@@ -2300,13 +2331,13 @@ ${transcriptLines(chunk)}`;
                       textAlign: "center",
                       letterSpacing: 0.2,
                     }}>
-                      校历安排 · {typeof displayText === "string" ? displayText : "继续日常"}
+                      {bookEntry.label} · {bookEntry.text || "继续日常"}
                     </div>
                   </div>
                   {m.roll && (
                     <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
                       <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: hpUi.noteBg, border: `1px solid ${hpUi.noteBorder}`, color: hpUi.noteText, fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
-                        {m.roll}
+                        页边批注 · {m.roll}
                       </div>
                     </div>
                   )}
@@ -2340,14 +2371,83 @@ ${transcriptLines(chunk)}`;
               padding: "4px 9px",
             });
             if (HP_KIOSK) {
-              const frameInk = isUser ? hpUi.cardInkUser : hpUi.cardInkNarrator;
-              const label = isUser ? "你" : "旁白";
+              if (bookEntry?.type === "action") {
+                return (
+                  <Fragment key={msgId}>
+                    <article style={{ width: "100%", maxWidth: 560, margin: isMobile ? "0 auto 16px" : "0 auto 20px", animation: "fadeUp 0.18s ease" }}>
+                      {isEditing ? (
+                        <div style={{ border: `1px solid ${hpUi.line}`, borderRadius: 12, background: hpUi.noteBg, padding: "10px 11px" }}>
+                          <div style={{ fontSize: 11, color: hpUi.noteText, fontWeight: 800, marginBottom: 7 }}>行动手记</div>
+                          <textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={Math.min(8, Math.max(3, editDraft.split("\n").length))}
+                            style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${hpUi.line}`, borderRadius: 10, background: hpUi.inputPaper, color: hpUi.inputInk, fontSize: 14, fontFamily: V.serif, lineHeight: 1.65, padding: "9px 11px", resize: "vertical", outline: "none" }}
+                          />
+                          <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "center" }}>
+                            <button onClick={() => saveEditedMessage(msgId)} disabled={loading} style={editButton(loading)}>保存并重写本页</button>
+                            <button onClick={() => { setEditingMsgId(null); setEditDraft(""); }} style={editButton()}>取消</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div title={bookEntry.text} style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
+                          maxWidth: "100%",
+                          margin: "0 auto",
+                          color: hpUi.noteText,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          lineHeight: 1.45,
+                        }}>
+                          <span style={{ flex: "1 1 20px", maxWidth: 72, height: 1, background: `linear-gradient(90deg, transparent, ${hpUi.noteBorder})` }} />
+                          <button
+                            type="button"
+                            onClick={() => startEditMessage(m, msgId)}
+                            disabled={loading || m.streaming}
+                            style={{
+                              minWidth: 0,
+                              maxWidth: "78%",
+                              border: `1px solid ${hpUi.noteBorder}`,
+                              borderRadius: 999,
+                              background: hpUi.noteBg,
+                              color: hpUi.noteText,
+                              padding: "5px 12px",
+                              fontFamily: "inherit",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              cursor: loading || m.streaming ? "not-allowed" : "pointer",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            行动手记 · {bookEntry.text || "继续"}
+                          </button>
+                          <span style={{ flex: "1 1 20px", maxWidth: 72, height: 1, background: `linear-gradient(90deg, ${hpUi.noteBorder}, transparent)` }} />
+                        </div>
+                      )}
+                    </article>
+                    {m.roll && (
+                      <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
+                        <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: hpUi.noteBg, border: `1px solid ${hpUi.noteBorder}`, color: hpUi.noteText, fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
+                          页边批注 · {m.roll}
+                        </div>
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              }
+              const frameInk = hpUi.cardInkNarrator;
+              const label = "正文";
               return (
                 <Fragment key={msgId}>
                   <article
                     style={{
                       width: "100%",
-                      maxWidth: isUser ? 590 : 620,
+                      maxWidth: 620,
                       margin: isMobile ? "0 auto 18px" : "0 auto 24px",
                       animation: "fadeUp 0.18s ease",
                     }}
@@ -2399,7 +2499,7 @@ ${transcriptLines(chunk)}`;
                           />
                         ) : (
                           <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: isMobile ? 17 : 18, lineHeight: isMobile ? 1.95 : 2.05, fontFamily: V.serif, fontWeight: 500 }}>
-                            {typeof displayText === "string" ? displayText : typeof m.content === "string" ? m.content : "[多模态消息]"}
+                            {bookEntry?.text || (typeof displayText === "string" ? displayText : typeof m.content === "string" ? m.content : "[多模态消息]")}
                             {m.streaming && <span style={{ opacity: 0.55, animation: "blink 1s infinite" }}>▋</span>}
                           </div>
                         )}
@@ -2412,17 +2512,16 @@ ${transcriptLines(chunk)}`;
                       </div>
                     ) : (
                       <div style={{ display: "flex", gap: 5, marginTop: 7, justifyContent: "center", opacity: hpIsNight ? 0.62 : 0.46 }}>
-                        <button title="Regenerate" onClick={() => regenerateFrom(msgId)} disabled={loading || m.streaming} style={actionButton(loading || m.streaming)}>↻</button>
-                        <button title="Copy" onClick={() => copyMessage(m)} disabled={m.streaming} style={actionButton(m.streaming)}>⧉</button>
-                        <button title="Edit" onClick={() => startEditMessage(m, msgId)} disabled={loading || m.streaming || !isUser} style={actionButton(loading || m.streaming || !isUser)}>✎</button>
-                        <button title="Delete" onClick={() => deleteMessage(msgId)} disabled={m.streaming} style={actionButton(m.streaming)}>⌫</button>
+                        <button title="重写本页" onClick={() => regenerateFrom(msgId)} disabled={loading || m.streaming} style={actionButton(loading || m.streaming)}>↻</button>
+                        <button title="复制正文" onClick={() => copyMessage(m)} disabled={m.streaming} style={actionButton(m.streaming)}>⧉</button>
+                        <button title="删除本页" onClick={() => deleteMessage(msgId)} disabled={m.streaming} style={actionButton(m.streaming)}>⌫</button>
                       </div>
                     )}
                   </article>
                   {m.roll && (
                     <div style={{ display: "flex", justifyContent: "center", margin: isMobile ? "0 0 22px" : "0 0 28px" }}>
                       <div style={{ maxWidth: "86%", padding: "7px 16px", borderRadius: 999, background: hpUi.noteBg, border: `1px solid ${hpUi.noteBorder}`, color: hpUi.noteText, fontSize: 12, fontWeight: 600, textAlign: "center", letterSpacing: 0.3 }}>
-                        {m.roll}
+                        页边批注 · {m.roll}
                       </div>
                     </div>
                   )}
@@ -2636,6 +2735,52 @@ ${transcriptLines(chunk)}`;
               )}
             </div>
           )}
+          {HP_KIOSK && activeMode === "world" && stagePlaces.length > 0 && !input.trim() && (
+            <div style={{
+              marginBottom: 7,
+              border: `1px solid ${hpUi.line}`,
+              borderRadius: 13,
+              background: hpUi.calendarBg,
+              padding: "7px 9px",
+              boxShadow: hpIsNight ? "0 10px 22px rgba(0,0,0,0.10)" : "0 10px 22px rgba(89,54,32,0.08)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
+                <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontWeight: 900, color: hpUi.calendarText }}>
+                  地点舞台
+                </div>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: hpUi.calendarGold, opacity: 0.9, whiteSpace: "nowrap" }}>
+                  {scenePeriod.label}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 1, scrollbarWidth: "none" }}>
+                {stagePlaces.map((place) => (
+                  <button
+                    key={place.id}
+                    type="button"
+                    onClick={() => chooseStagePlace(place)}
+                    disabled={loading}
+                    title={`${place.label}：舞台入口，不固定事件`}
+                    style={{
+                      flex: "0 0 auto",
+                      minHeight: 28,
+                      padding: "0 10px",
+                      borderRadius: 999,
+                      border: `1px solid ${hpUi.line}`,
+                      background: hpUi.calendarChoiceBg,
+                      color: loading ? V.faint : hpUi.calendarText,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      fontFamily: "inherit",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {place.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{
             position: "relative",
             display: "flex",
@@ -2659,7 +2804,7 @@ ${transcriptLines(chunk)}`;
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, inputMaxHeight) + "px"; }}
-              placeholder={activeMode === "world" ? "描述你的行动 / 回应场景…" : `和 ${activeChar.name} 说话…`}
+              placeholder={bookInputPlaceholder({ playerName: player.name, mode: activeMode, activeCharacterName: activeChar.name })}
               rows={1}
               style={{ position: "relative", zIndex: 1, flex: 1, border: "none", outline: "none", fontSize: isMobile ? 15 : 16, fontFamily: HP_KIOSK ? V.serif : "inherit", color: HP_KIOSK ? hpUi.inputInk : V.ink, background: "transparent", lineHeight: isMobile ? 1.25 : 1.35, minHeight: isMobile ? 24 : 34, maxHeight: inputMaxHeight, overflowY: "auto", resize: "none", padding: isMobile ? "2px 0" : "3px 0" }}
             />
@@ -2683,7 +2828,7 @@ ${transcriptLines(chunk)}`;
           </div>
           {!isMobile && (
             <div style={{ fontSize: 11, color: HP_KIOSK ? hpUi.chromeMuted : V.faint, marginTop: 6, textAlign: "center" }}>
-              {activeMode === "world" ? "世界聊天 · 旁白推进，可扮演所有角色" : `角色聊天 · 与 ${activeChar.name} 一对一`} · 共享世界状态，不共享聊天记录
+              {HP_KIOSK ? bookHelperText(activeMode) : (activeMode === "world" ? "世界聊天 · 旁白推进，可扮演所有角色" : `角色聊天 · 与 ${activeChar.name} 一对一`) + " · 共享世界状态，不共享聊天记录"}
             </div>
           )}
           </div>

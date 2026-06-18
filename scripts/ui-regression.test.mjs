@@ -22,6 +22,8 @@ ok(app.includes("const inputMaxHeight = isMobile ? 76 : 180"), "mobile input max
 ok(app.includes("{!isMobile && currentCanonBeat"), "mobile date line does not force canon phase text into the header");
 ok(app.includes("<BackgroundOrnaments tone={hpTone} />"), "day theme renders background ornaments outside text cards");
 ok(app.includes("width: isMobile ? \"100%\" : \"min(92vw, 560px)\""), "mobile HP sheets use bottom-sheet width");
+ok(app.includes("行动手记") && app.includes("页边批注") && app.includes("地点舞台"), "HP world shell presents interaction-book language");
+ok(!app.includes("描述你的行动 / 回应场景"), "HP input no longer uses chat-style placeholder text");
 ok(atmosphere.includes("const size = mobile ? 34 : 58"), "mobile foil title stays compact");
 
 for (const forbidden of ["⚡", "🏆", "🎒", "📚", "💛", "🧩", "✨ 原创角色", "🪄"]) {
